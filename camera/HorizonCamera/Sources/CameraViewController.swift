@@ -66,7 +66,10 @@ final class CameraViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); engine.start(); preview.isPaused = false }
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        guard !UserDefaults.standard.bool(forKey: "stabilizationOfferShown"), presentedViewController == nil else { return }
+        offerStabilization()
+    }
+    private func offerStabilization() {
+        guard current.ready, view.window != nil, !UserDefaults.standard.bool(forKey: "stabilizationOfferShown"), presentedViewController == nil else { return }
         let offer = UIAlertController(title: "Включить стабилизацию?", message: "Горизонт выравнивается по датчикам движения. Держите телефон вертикально и плавно наклоните влево или вправо: угол появится над кнопкой записи. Края кадра обрезаются; это не замена оптической стабилизации.", preferredStyle: .alert)
         for (title, enabled) in [("Включить", true), ("Обычная съёмка", false)] {
             offer.addAction(UIAlertAction(title: title, style: .default) { _ in
@@ -126,6 +129,7 @@ final class CameraViewController: UIViewController {
         status.text = options.horizon && current.ready ? "\(current.motionStatus) · \(Int(current.tilt.rounded()))°\n\(current.message)" : current.message; clock.isHidden = !current.recording
         let seconds = Int(current.duration); clock.text = String(format: "● %02d:%02d", seconds / 60, seconds % 60); clock.textColor = accent
         UIView.animate(withDuration: 0.24, delay: 0, options: [.beginFromCurrentState, .curveEaseInOut], animations: { self.view.setNeedsLayout(); self.view.layoutIfNeeded() })
+        offerStabilization()
     }
 
     private func commit() {
