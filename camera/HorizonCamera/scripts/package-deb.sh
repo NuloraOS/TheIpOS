@@ -30,7 +30,7 @@ Architecture: $architecture
 Depends: firmware (>= $deployment)
 Maintainer: TheIpOS
 Author: TheIpOS
-Section: Multimedia
+Section: Camera
 Description: Camera with software horizon lock. Standalone app, no system camera injection.
 EOF
 cat > "$build/stage/DEBIAN/postinst" <<EOF

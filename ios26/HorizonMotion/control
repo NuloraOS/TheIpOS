@@ -6,4 +6,4 @@ Depends: firmware (>= 12.0), mobilesubstrate, preferenceloader
 Description: Adjustable short motion trails for UIKit animations and scrolling. Does not increase display refresh rate.
 Maintainer: TheIpOS
 Author: TheIpOS
-Section: Tweaks
+Section: iOS 26

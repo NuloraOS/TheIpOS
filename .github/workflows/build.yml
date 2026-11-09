@@ -23,13 +23,13 @@ jobs:
       - name: Build motion blur and preferences
         env:
           THEOS: ${{ runner.temp }}/theos
-        run: gmake -C system/HorizonMotion FINALPACKAGE=1 package
+        run: gmake -C ios26/HorizonMotion FINALPACKAGE=1 package
       - name: Inspect packages
         run: |
-          mkdir -p artifacts/camera artifacts/system artifacts/utils
+          mkdir -p artifacts/camera artifacts/ios26 artifacts/utility artifacts/icons artifacts/wallpapers
           cp camera/HorizonCamera/packages/*.deb artifacts/camera/
-          cp system/HorizonMotion/packages/*.deb artifacts/system/
-          for package in artifacts/camera/*.deb artifacts/system/*.deb; do
+          cp ios26/HorizonMotion/packages/*.deb artifacts/ios26/
+          for package in artifacts/camera/*.deb artifacts/ios26/*.deb; do
             dpkg-deb --info "$package"
             dpkg-deb --contents "$package"
           done
@@ -50,31 +50,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: ios-deb-packages
           path: repo
       - name: Create APT index
-        run: |
-          cd repo
-          dpkg-scanpackages --multiversion . /dev/null > Packages
-          gzip -c -9 Packages > Packages.gz
-          bzip2 -c -9 Packages > Packages.bz2
-          echo 'Origin: TheIpOS' > Release
-          echo 'Label: TheIpOS' >> Release
-          echo 'Suite: stable' >> Release
-          echo 'Codename: ios' >> Release
-          echo 'Architectures: iphoneos-arm' >> Release
-          echo 'Components: main' >> Release
-          echo 'Description: Camera, utils and system tweaks' >> Release
-          echo 'SHA256:' >> Release
-          for file in Packages Packages.gz Packages.bz2; do
-            printf ' %s %s %s\n' "$(sha256sum "$file" | cut -d' ' -f1)" "$(stat -c%s "$file")" "$file" >> Release
-          done
-          touch .nojekyll
-          cat > index.html <<'HTML'
-          <!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>TheIpOS</title><style>body{margin:10vh auto;padding:24px;max-width:720px;background:#09090c;color:#eee;font:17px system-ui}h1,a{color:#ffbd00}a{display:block;padding:14px 0}p{line-height:1.6;color:#aaa}</style><h1>TheIpOS</h1><p>camera · utils · system</p><p>Камера с удержанием горизонта и регулируемый motion blur. Первая сборка для iPhone 5s, iOS 12, Chimera.</p><p>Адрес этой страницы можно добавить как репозиторий в Sileo. Пакеты экспериментальные, испытание на телефоне требуется.</p><a href="camera/">camera</a><a href="system/">system</a><a href="Packages">Индекс пакетов</a></html>
-          HTML
+        run: python3 scripts/make-repo.py repo
       - uses: actions/upload-pages-artifact@v3
         with:
           path: repo
