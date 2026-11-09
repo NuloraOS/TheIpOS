@@ -1,6 +1,6 @@
 Nulora 0.2.0 — experimental builds for iPhone 5s / iOS 12 / Chimera.
 
-- Camera: visible stabilization status, sensor errors and tilt; corrected unmirrored-frame rotation; torch brightness controls.
+- Camera: remove mandatory SwiftUI dependency incompatible with iOS 12; verify every embedded binary before packaging. Visible stabilization status, sensor errors and tilt; corrected unmirrored-frame rotation; torch brightness controls.
 - Motion: directional Core Image blur, SpringBoard support, scrolling and animated offsets, separate home/app switches.
 - Dock: new iOS 12-only package, five icon slots, rounded translucent panel, radius and opacity preferences.
 - Original matching camera and preferences icons.

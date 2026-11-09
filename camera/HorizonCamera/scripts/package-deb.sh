@@ -14,9 +14,12 @@ build="$PWD/build/deb-$scheme-$(date +%s)"
 mkdir -p "$build/stage/DEBIAN" "$build/stage$prefix/Applications" "$PWD/packages"
 xcodebuild -project HorizonCamera.xcodeproj -scheme HorizonCamera -configuration Release -sdk iphoneos \
   -derivedDataPath "$build/DerivedData" CODE_SIGNING_ALLOWED=NO \
-  IPHONEOS_DEPLOYMENT_TARGET="$deployment" ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build
+  IPHONEOS_DEPLOYMENT_TARGET="$deployment" ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+  OTHER_SWIFT_FLAGS="-Xfrontend -disable-autolink-framework -Xfrontend SwiftUI" \
+  OTHER_LDFLAGS="-weak_framework SwiftUI" build
 app="$build/stage$prefix/Applications/HorizonCamera.app"
 ditto "$build/DerivedData/Build/Products/Release-iphoneos/HorizonCamera.app" "$app"
+python3 ../../scripts/verify-ios12.py "$app"
 # Sign every embedded Mach-O, then the executable. No trust-cache or kernel modifications.
 while IFS= read -r -d '' binary; do
   if file "$binary" | grep -q 'Mach-O'; then ldid -S "$binary"; fi
