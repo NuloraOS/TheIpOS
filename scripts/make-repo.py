@@ -25,9 +25,4 @@ for label,algorithm in [('MD5Sum','md5'),('SHA1','sha1'),('SHA256','sha256'),('S
         release += f' {hashlib.new(algorithm,data).hexdigest()} {len(data)} {name}\n'
 (root/'Release').write_text(release,encoding='utf8')
 (root/'.nojekyll').touch()
-links=[]
-for file in sorted(root.rglob('*.deb')):
-    name=subprocess.check_output(['dpkg-deb','-f',str(file),'Name'],text=True).strip()
-    links.append(f'<p><a href="{file.relative_to(root).as_posix()}">{html.escape(name)} — DEB</a></p>')
-(root/'index.html').write_text('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Nelora</title><style>body{max-width:760px;margin:10vh auto;padding:24px;background:#09090c;color:#eee;font:18px system-ui}a{color:#c3a3ff}</style><h1>Все приложения</h1>'+''.join(links),encoding='utf8')
 print('PASS: exactly two cameras and Dock; Release includes Components')
