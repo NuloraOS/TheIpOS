@@ -60,8 +60,8 @@ jobs:
           dpkg-scanpackages --multiversion . /dev/null > Packages
           gzip -c -9 Packages > Packages.gz
           bzip2 -c -9 Packages > Packages.bz2
-          echo 'Origin: NeooTech' > Release
-          echo 'Label: NeooTech iOS' >> Release
+          echo 'Origin: TheIpOS' > Release
+          echo 'Label: TheIpOS' >> Release
           echo 'Suite: stable' >> Release
           echo 'Codename: ios' >> Release
           echo 'Architectures: iphoneos-arm' >> Release
@@ -73,7 +73,7 @@ jobs:
           done
           touch .nojekyll
           cat > index.html <<'HTML'
-          <!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NeooTech iOS</title><style>body{margin:10vh auto;padding:24px;max-width:720px;background:#09090c;color:#eee;font:17px system-ui}h1,a{color:#ffbd00}a{display:block;padding:14px 0}p{line-height:1.6;color:#aaa}</style><h1>NeooTech iOS</h1><p>camera · utils · system</p><p>Камера с удержанием горизонта и регулируемый motion blur. Первая сборка для iPhone 5s, iOS 12, Chimera.</p><p>Адрес этой страницы можно добавить как репозиторий в Sileo. Пакеты экспериментальные, испытание на телефоне требуется.</p><a href="camera/">camera</a><a href="system/">system</a><a href="Packages">Индекс пакетов</a></html>
+          <!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>TheIpOS</title><style>body{margin:10vh auto;padding:24px;max-width:720px;background:#09090c;color:#eee;font:17px system-ui}h1,a{color:#ffbd00}a{display:block;padding:14px 0}p{line-height:1.6;color:#aaa}</style><h1>TheIpOS</h1><p>camera · utils · system</p><p>Камера с удержанием горизонта и регулируемый motion blur. Первая сборка для iPhone 5s, iOS 12, Chimera.</p><p>Адрес этой страницы можно добавить как репозиторий в Sileo. Пакеты экспериментальные, испытание на телефоне требуется.</p><a href="camera/">camera</a><a href="system/">system</a><a href="Packages">Индекс пакетов</a></html>
           HTML
       - uses: actions/upload-pages-artifact@v3
         with:

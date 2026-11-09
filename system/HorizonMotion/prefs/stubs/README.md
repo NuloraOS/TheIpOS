@@ -1,0 +1,1 @@
+This text stub only lists the system PSListController class used by the preference bundle. It contains no Apple framework implementation or SDK binary. The real Preferences framework must be present on the target iPhone.

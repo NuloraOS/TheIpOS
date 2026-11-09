@@ -10,9 +10,9 @@ static char ghostKey;
 @implementation HMGhostView @end
 
 static void HMReload(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef info) {
-    CFPreferencesAppSynchronize(CFSTR("com.neotech.horizonmotion"));
-    CFPropertyListRef on = CFPreferencesCopyAppValue(CFSTR("enabled"), CFSTR("com.neotech.horizonmotion"));
-    CFPropertyListRef amount = CFPreferencesCopyAppValue(CFSTR("strength"), CFSTR("com.neotech.horizonmotion"));
+    CFPreferencesAppSynchronize(CFSTR("com.theipos.motion"));
+    CFPropertyListRef on = CFPreferencesCopyAppValue(CFSTR("enabled"), CFSTR("com.theipos.motion"));
+    CFPropertyListRef amount = CFPreferencesCopyAppValue(CFSTR("strength"), CFSTR("com.theipos.motion"));
     enabled = on ? [(__bridge id)on boolValue] : YES;
     strength = amount ? MIN(0.35, MAX(0, [(__bridge id)amount doubleValue])) : 0.18;
     if (on) CFRelease(on); if (amount) CFRelease(amount);
@@ -74,6 +74,6 @@ static void HMTrail(UIWindow *window, CGPoint direction) {
     @autoreleasepool {
         HMReload(NULL, NULL, NULL, NULL, NULL);
         %init;
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, HMReload, CFSTR("com.neotech.horizonmotion/changed"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, HMReload, CFSTR("com.theipos.motion/changed"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     }
 }

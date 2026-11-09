@@ -23,13 +23,13 @@ while IFS= read -r -d '' binary; do
 done < <(find "$app" -type f -print0)
 chmod 755 "$app/HorizonCamera"
 cat > "$build/stage/DEBIAN/control" <<EOF
-Package: com.neotech.horizoncam
-Name: Horizon Camera
+Package: com.theipos.camera
+Name: TheIpOS Camera
 Version: 0.1.0
 Architecture: $architecture
 Depends: firmware (>= $deployment)
-Maintainer: NeooTech
-Author: NeooTech
+Maintainer: TheIpOS
+Author: TheIpOS
 Section: Multimedia
 Description: Camera with software horizon lock. Standalone app, no system camera injection.
 EOF
@@ -49,5 +49,5 @@ done
 exit 0
 EOF
 chmod 755 "$build/stage/DEBIAN/postinst" "$build/stage/DEBIAN/postrm"
-dpkg-deb -Zgzip --build "$build/stage" "$PWD/packages/com.neotech.horizoncam_0.1.0_${architecture}.deb"
+dpkg-deb -Zgzip --build "$build/stage" "$PWD/packages/com.theipos.camera_0.1.0_${architecture}.deb"
 echo "Готов DEB для $scheme; установка на телефон здесь не выполняется."
