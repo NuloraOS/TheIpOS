@@ -1,0 +1,9 @@
+Package: com.neotech.horizonmotion
+Name: Horizon Motion
+Version: 0.1.0
+Architecture: iphoneos-arm
+Depends: firmware (>= 12.0), mobilesubstrate, preferenceloader
+Description: Adjustable short motion trails for UIKit animations and scrolling. Does not increase display refresh rate.
+Maintainer: NeooTech
+Author: NeooTech
+Section: Tweaks

@@ -1,0 +1,9 @@
+**/build/
+**/.theos/
+**/packages/
+**/xcuserdata/
+.DS_Store
+*.p12
+*.mobileprovision
+*.key
+owner_private.xml

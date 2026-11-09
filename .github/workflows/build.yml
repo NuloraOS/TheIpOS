@@ -1,0 +1,82 @@
+name: Build iOS DEB packages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-packages-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  packages:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tools
+        run: |
+          brew install ldid dpkg make
+          git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git "$RUNNER_TEMP/theos"
+      - name: Build camera
+        run: bash camera/HorizonCamera/scripts/package-deb.sh rootful
+      - name: Build motion blur and preferences
+        env:
+          THEOS: ${{ runner.temp }}/theos
+        run: gmake -C system/HorizonMotion FINALPACKAGE=1 package
+      - name: Inspect packages
+        run: |
+          mkdir -p artifacts/camera artifacts/system artifacts/utils
+          cp camera/HorizonCamera/packages/*.deb artifacts/camera/
+          cp system/HorizonMotion/packages/*.deb artifacts/system/
+          for package in artifacts/camera/*.deb artifacts/system/*.deb; do
+            dpkg-deb --info "$package"
+            dpkg-deb --contents "$package"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-deb-packages
+          path: artifacts/
+          retention-days: 14
+  repository:
+    needs: packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-deb-packages
+          path: repo
+      - name: Create APT index
+        run: |
+          cd repo
+          dpkg-scanpackages --multiversion . /dev/null > Packages
+          gzip -c -9 Packages > Packages.gz
+          bzip2 -c -9 Packages > Packages.bz2
+          echo 'Origin: NeooTech' > Release
+          echo 'Label: NeooTech iOS' >> Release
+          echo 'Suite: stable' >> Release
+          echo 'Codename: ios' >> Release
+          echo 'Architectures: iphoneos-arm' >> Release
+          echo 'Components: main' >> Release
+          echo 'Description: Camera, utils and system tweaks' >> Release
+          echo 'SHA256:' >> Release
+          for file in Packages Packages.gz Packages.bz2; do
+            printf ' %s %s %s\n' "$(sha256sum "$file" | cut -d' ' -f1)" "$(stat -c%s "$file")" "$file" >> Release
+          done
+          touch .nojekyll
+          cat > index.html <<'HTML'
+          <!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NeooTech iOS</title><style>body{margin:10vh auto;padding:24px;max-width:720px;background:#09090c;color:#eee;font:17px system-ui}h1,a{color:#ffbd00}a{display:block;padding:14px 0}p{line-height:1.6;color:#aaa}</style><h1>NeooTech iOS</h1><p>camera · utils · system</p><p>Камера с удержанием горизонта и регулируемый motion blur. Первая сборка для iPhone 5s, iOS 12, Chimera.</p><p>Адрес этой страницы можно добавить как репозиторий в Sileo. Пакеты экспериментальные, испытание на телефоне требуется.</p><a href="camera/">camera</a><a href="system/">system</a><a href="Packages">Индекс пакетов</a></html>
+          HTML
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: repo
+      - uses: actions/deploy-pages@v4
+        id: deployment
