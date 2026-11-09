@@ -9,13 +9,14 @@ enum CameraFailure: LocalizedError {
 }
 
 final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
-    struct Options { var horizon = true; var crop = CropMode.dynamic; var shape = FrameShape.portrait }
+    struct Options { var horizon = false; var crop = CropMode.dynamic; var shape = FrameShape.portrait; var resolution = 720 }
     struct State {
         var ready = false, recording = false, finishing = false, ultraWide = false, torch = false, front = false, ultraSelected = false, motionAvailable = true
         var message = "Подготовка камеры…"
         var duration = 0.0
-        var motionReady = false, tilt = 0.0
+        var motionReady = false, tilt = 0.0, digitalZoom = 1.0
         var motionStatus = "Ожидание датчиков…"
+        var resolution = 720
     }
     let session = AVCaptureSession()
     let queue = DispatchQueue(label: "camera.capture", qos: .userInitiated)
@@ -24,36 +25,67 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     var onSaved: ((URL) -> Void)?
     private let videoOutput = AVCaptureVideoDataOutput()
     private let audioOutput = AVCaptureAudioDataOutput()
-    private let context = CIContext(options: [.cacheIntermediates: false])
+    private let context = CameraGPU.context
     private let motion = MotionTracker()
     private var options = Options(), state = State()
     private var cameraInput: AVCaptureDeviceInput?
     private var recorder: MovieRecorder?
-    private var configured = false, audioEnabled = false
+    private var configured = false, audioEnabled = false, starting = false
+    private var generation = 0
+    private var digitalZoom = 1.0
     private var zoom = 1.0, startedAt: Double?, lastStateTime = 0.0, lastMotionStatus = 0.0
     private var latestImage: CIImage?
+    private var outputSize: CGSize { CGSize(width: options.shape.size.width * CGFloat(state.resolution) / 720, height: options.shape.size.height * CGFloat(state.resolution) / 720) }
 
     func start() {
-        AVCaptureDevice.requestAccess(for: .video) { [weak self] allowed in
-            guard let self = self else { return }
-            guard allowed else { self.queue.async { self.state.message = "Разрешите доступ к камере в настройках iPhone"; self.publish() }; return }
-            AVCaptureDevice.requestAccess(for: .audio) { microphone in
-                self.queue.async {
+        queue.async {
+            guard !self.starting else { return }
+            if self.session.isRunning { return }
+            self.starting = true; self.generation += 1
+            let ticket = self.generation
+            #if targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--ui-probe") {
+                self.starting = false; self.state.ready = true
+                self.state.resolution = self.options.resolution
+                self.state.message = "Симулятор · без камеры"; self.publish(); return
+            }
+            #endif
+            Self.permission(.video) { allowed in
+                guard allowed else { self.queue.async { guard ticket == self.generation else { return }; self.starting = false; self.state.message = "Разрешите доступ к камере в настройках iPhone"; self.publish() }; return }
+                Self.permission(.audio) { microphone in self.queue.async {
+                    guard ticket == self.generation else { return }
+                    self.starting = false
                     do {
                         if !self.configured { try self.configure(microphone: microphone) }
                         if !self.session.isRunning { self.session.startRunning() }
                         if self.options.horizon { self.motion.start() }
-                        self.state.ready = true; self.state.message = self.audioEnabled ? "720p · до 30 кадров/с" : "720p · запись без микрофона"
+                        self.state.ready = false; self.state.message = "\(self.state.resolution)p · " + (self.audioEnabled ? "до 30 кадров/с" : "без микрофона")
                         self.publish()
                     } catch { self.fail(error) }
-                }
+                } }
             }
+        }
+    }
+
+    private static func permission(_ type: AVMediaType, completion: @escaping (Bool) -> Void) {
+        switch AVCaptureDevice.authorizationStatus(for: type) {
+        case .authorized: completion(true)
+        case .notDetermined: AVCaptureDevice.requestAccess(for: type, completionHandler: completion)
+        default: completion(false)
+        }
+    }
+
+    func setZoom(_ value: Double) {
+        queue.async {
+            self.digitalZoom = CameraZoom.clamp(value)
+            self.state.digitalZoom = self.digitalZoom
+            self.publish()
         }
     }
 
     private func configure(microphone: Bool) throws {
         session.beginConfiguration(); defer { session.commitConfiguration() }
-        if session.canSetSessionPreset(.hd1280x720) { session.sessionPreset = .hd1280x720 }
+        applyResolution()
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { throw CameraFailure.message("Камера недоступна") }
         let input = try AVCaptureDeviceInput(device: camera)
         guard session.canAddInput(input), session.canAddOutput(videoOutput) else { throw CameraFailure.message("Камеру не удалось настроить") }
@@ -93,10 +125,52 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     func update(_ newOptions: Options) {
         queue.async {
             guard self.recorder == nil && !self.state.finishing else { return }
+            let resolutionChanged = self.options.resolution != newOptions.resolution
             self.options = newOptions; self.options.horizon = newOptions.horizon && self.motion.available
+            if resolutionChanged && self.configured { self.session.beginConfiguration(); self.applyResolution(); self.session.commitConfiguration() }
             self.zoom = 1; self.configureConnection()
             if self.options.horizon && self.session.isRunning { self.motion.start() } else { self.motion.stop() }
             if newOptions.horizon && !self.motion.available { self.state.message = "Датчики движения недоступны — обычный режим"; self.publish() }
+        }
+    }
+
+    private func applyResolution() {
+        let preset: AVCaptureSession.Preset = options.resolution >= 1080 ? .hd1920x1080 : .hd1280x720
+        if session.canSetSessionPreset(preset) { session.sessionPreset = preset; state.resolution = options.resolution >= 1080 ? 1080 : 720 }
+        else if session.canSetSessionPreset(.hd1280x720) { session.sessionPreset = .hd1280x720; state.resolution = 720 }
+    }
+
+    func focus(at point: CGPoint) {
+        queue.async {
+            guard let device = self.cameraInput?.device else { return }
+            do { try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
+                let p = CGPoint(x:min(1,max(0,point.x)),y:min(1,max(0,point.y)))
+                if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = p; if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus } }
+                if device.isExposurePointOfInterestSupported && device.exposureMode != .custom { device.exposurePointOfInterest = p }
+            } catch { self.fail(error) }
+        }
+    }
+    func setExposure(_ value: Float) {
+        queue.async { guard let d = self.cameraInput?.device else { return }; do { try d.lockForConfiguration(); defer { d.unlockForConfiguration() }; d.setExposureTargetBias(min(d.maxExposureTargetBias,max(d.minExposureTargetBias,value)),completionHandler:nil) } catch { self.fail(error) } }
+    }
+    func setFocusDistance(_ value: Float) {
+        queue.async { guard let d = self.cameraInput?.device, d.isFocusModeSupported(.locked) else { return }; do { try d.lockForConfiguration(); defer { d.unlockForConfiguration() }; d.setFocusModeLocked(lensPosition:min(1,max(0,value)),completionHandler:nil) } catch { self.fail(error) } }
+    }
+    func setManual(iso: Float?, seconds: Double?, temperature: Float?) {
+        queue.async {
+            guard let d = self.cameraInput?.device else { return }
+            do { try d.lockForConfiguration(); defer { d.unlockForConfiguration() }
+                if (iso != nil || seconds != nil) && d.isExposureModeSupported(.custom) {
+                    let sensitivity = min(d.activeFormat.maxISO,max(d.activeFormat.minISO,iso ?? d.iso))
+                    let duration = min(CMTimeGetSeconds(d.activeFormat.maxExposureDuration),max(CMTimeGetSeconds(d.activeFormat.minExposureDuration),seconds ?? CMTimeGetSeconds(d.exposureDuration)))
+                    d.setExposureModeCustom(duration:CMTime(seconds:duration,preferredTimescale:1_000_000),iso:sensitivity,completionHandler:nil)
+                }
+                if let temperature = temperature, d.isWhiteBalanceModeSupported(.locked) {
+                    var gains = d.deviceWhiteBalanceGains(for:AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature:temperature,tint:0))
+                    gains.redGain = min(d.maxWhiteBalanceGain,max(1,gains.redGain)); gains.greenGain = min(d.maxWhiteBalanceGain,max(1,gains.greenGain)); gains.blueGain = min(d.maxWhiteBalanceGain,max(1,gains.blueGain))
+                    d.setWhiteBalanceModeLocked(with:gains,completionHandler:nil)
+                }
+            } catch { self.fail(error) }
         }
     }
 
@@ -113,6 +187,7 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
                 if self.session.canAddInput(next) { self.session.addInput(next); self.cameraInput = next }
                 else { self.session.addInput(old) }
                 self.session.commitConfiguration()
+                self.session.beginConfiguration(); self.applyResolution(); self.session.commitConfiguration()
                 try self.configureDevice(self.cameraInput!.device); self.configureConnection()
                 self.zoom = 1; self.state.front = self.cameraInput!.device.position == .front; self.state.ultraSelected = ultraWide && !front; self.state.torch = false; self.publish()
             } catch { self.fail(error) }
@@ -152,7 +227,7 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
                 guard capacity > 150_000_000 else { throw CameraFailure.message("Для записи нужно не менее 150 МБ свободного места") }
                 let file = root.appendingPathComponent("Horizon-\(UUID().uuidString).mov")
                 let audio = self.audioEnabled ? self.audioOutput.recommendedAudioSettingsForAssetWriter(writingTo: .mov) : nil
-                self.recorder = try MovieRecorder(url: file, size: self.options.shape.size, audioSettings: audio, context: self.context)
+                self.recorder = try MovieRecorder(url: file, size: self.outputSize, audioSettings: audio, context: self.context)
                 self.startedAt = nil; self.state.recording = true; self.state.duration = 0; self.publish()
             } catch { self.fail(error) }
         }
@@ -175,7 +250,7 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
 
     func stillFrame() {
         queue.async {
-            guard let frame = self.latestImage else { return }
+            guard let frame = self.latestImage else { self.state.message = "Ожидание первого кадра…"; self.publish(); return }
             do {
                 guard let cg = self.context.createCGImage(frame, from: frame.extent), let data = UIImage(cgImage: cg).jpegData(compressionQuality: 0.94) else { return }
                 let file = try Self.library().appendingPathComponent("Frame-\(UUID().uuidString).jpg")
@@ -187,14 +262,17 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
 
     func stop() {
         queue.async {
+            self.generation += 1; self.starting = false
             self.finishRecording(); self.motion.stop()
             if self.session.isRunning { self.session.stopRunning() }
+            self.latestImage = nil
             self.state.ready = false; self.publish()
         }
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
         if output === audioOutput { recorder?.append(audio: sample); return }
+        guard session.isRunning else { return }
         autoreleasepool {
             guard let buffer = CMSampleBufferGetImageBuffer(sample) else { return }
             let time = CMSampleBufferGetPresentationTimeStamp(sample)
@@ -208,7 +286,8 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
                     diagnostic.error.map { "Датчики: \($0)" } ?? (diagnostic.ready ? "Стабилизация включена" : "Ожидание датчиков — держите iPhone вертикально")
                 publish()
             }
-            let geometry = HorizonGeometry.make(source: input.extent.size, output: options.shape.size, angle: roll, mode: options.horizon ? options.crop : .dynamic, previousZoom: options.horizon ? zoom : 1)
+            let output = outputSize
+            let geometry = HorizonGeometry.make(source: input.extent.size, output: output, angle: roll, mode: options.horizon ? options.crop : .dynamic, previousZoom: options.horizon ? zoom : 1)
             zoom = geometry.zoom
             let corrected = input.transformed(by: CGAffineTransform(translationX: -input.extent.midX, y: -input.extent.midY))
                 // The delivered portrait buffer is explicitly unmirrored for both cameras.
@@ -216,9 +295,18 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
                 .transformed(by: CGAffineTransform(rotationAngle: CGFloat(roll)))
                 .cropped(to: geometry.crop)
                 .transformed(by: CGAffineTransform(translationX: -geometry.crop.minX, y: -geometry.crop.minY))
-                .transformed(by: CGAffineTransform(scaleX: options.shape.size.width / geometry.crop.width, y: options.shape.size.height / geometry.crop.height))
-                .cropped(to: CGRect(origin: .zero, size: options.shape.size))
-            latestImage = corrected; onFrame?(corrected); recorder?.append(image: corrected, at: time)
+                .transformed(by: CGAffineTransform(scaleX: output.width / geometry.crop.width, y: output.height / geometry.crop.height))
+                .cropped(to: CGRect(origin: .zero, size: output))
+            let zoomed: CIImage
+            if digitalZoom > 1.001 {
+                let crop = CameraZoom.crop(corrected.extent, factor: digitalZoom)
+                zoomed = corrected.cropped(to: crop)
+                    .transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
+                    .transformed(by: CGAffineTransform(scaleX: CGFloat(digitalZoom), y: CGFloat(digitalZoom)))
+                    .cropped(to: corrected.extent)
+            } else { zoomed = corrected }
+            latestImage = zoomed; onFrame?(zoomed); recorder?.append(image: zoomed, at: time)
+            if !state.ready { state.ready = true; publish() }
             if let error = recorder?.failure { fail(error); finishRecording() }
             if recorder != nil {
                 let seconds = CMTimeGetSeconds(time)

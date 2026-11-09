@@ -18,7 +18,7 @@ final class MotionTracker {
     func start() {
         guard available, !manager.isDeviceMotionActive else { return }
         lock.lock(); history.removeAll(); previous = nil; continuous = 0; failure = nil; lock.unlock()
-        manager.deviceMotionUpdateInterval = 1.0 / 100
+        manager.deviceMotionUpdateInterval = 1.0 / 60
         manager.startDeviceMotionUpdates(to: queue) { [weak self] motion, error in
             guard let self = self else { return }
             if let error = error { self.lock.lock(); self.failure = error.localizedDescription; self.lock.unlock() }

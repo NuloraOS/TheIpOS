@@ -6,45 +6,56 @@ struct NDCoordinate { NSInteger row; NSInteger col; };
 @interface SBDockView : UIView @end
 @interface SBDockIconListView : UIView @end
 static BOOL dockEnabled = YES;
-static CGFloat radius = 30, opacity = 0.85;
+static CGFloat radius = 32, opacity = 0.9;
 static char panelKey, savedKey;
 static NSHashTable *dockViews;
-static UIView *NDBackground(UIView *dock) {
-    Ivar field = class_getInstanceVariable(dock.class, "_backgroundView");
-    id value = field ? object_getIvar(dock, field) : nil;
-    return [value isKindOfClass:UIView.class] ? value : nil;
+static BOOL NDStock(UIView *view) {
+    NSString *name = NSStringFromClass(view.class);
+    return [name containsString:@"Background"] || [name containsString:@"Backdrop"] || [name containsString:@"Material"];
 }
 static void NDLayout(UIView *dock) {
-    UIView *stock = NDBackground(dock);
+    if (dock.bounds.size.width < 1 || dock.bounds.size.height < 1) return;
     UIVisualEffectView *panel = objc_getAssociatedObject(dock, &panelKey);
     if (!dockEnabled) {
         [panel removeFromSuperview]; objc_setAssociatedObject(dock, &panelKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NSNumber *saved = objc_getAssociatedObject(dock, &savedKey);
-        if (stock && saved) stock.alpha = saved.doubleValue;
+        for (UIView *child in dock.subviews) {
+            NSNumber *saved = objc_getAssociatedObject(child, &savedKey);
+            if (saved) { child.alpha = saved.doubleValue; objc_setAssociatedObject(child, &savedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
+        }
         return;
     }
-    // Avoid adding an opaque duplicate when an OS variant has no recognised backdrop.
-    if (!stock) return;
-    if (!objc_getAssociatedObject(dock, &savedKey)) objc_setAssociatedObject(dock, &savedKey, @(stock.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    stock.alpha = 0;
+    // iOS 12 releases use different backdrop classes. Do not silently abandon the dock if one ivar is absent.
+    UIView *icons = nil;
+    for (UIView *child in dock.subviews) {
+        if (child == panel) continue;
+        if ([NSStringFromClass(child.class) containsString:@"IconList"]) icons = child;
+        if (NDStock(child)) {
+            if (!objc_getAssociatedObject(child, &savedKey)) objc_setAssociatedObject(child, &savedKey, @(child.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            child.alpha = 0;
+        }
+    }
     if (!panel) {
         panel = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleLight]];
         panel.userInteractionEnabled = NO; panel.accessibilityElementsHidden = YES;
-        panel.layer.borderWidth = 0.5; panel.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.35].CGColor;
+        panel.layer.borderWidth = 0.75; panel.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.42].CGColor;
+        panel.contentView.backgroundColor = [UIColor colorWithWhite:1 alpha:0.06];
+        panel.clipsToBounds = YES;
         objc_setAssociatedObject(dock, &panelKey, panel, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [dock insertSubview:panel atIndex:0];
+        if (icons) [dock insertSubview:panel belowSubview:icons]; else [dock insertSubview:panel atIndex:0];
     }
-    panel.frame = CGRectInset(dock.bounds, 8, 7);
-    panel.layer.cornerRadius = MIN(radius, panel.bounds.size.height / 2);
-    panel.clipsToBounds = YES; panel.alpha = opacity;
+    CGRect frame = CGRectInset(dock.bounds, 8, 6);
+    if (frame.size.height > 110) { frame.origin.y = CGRectGetMaxY(frame) - 96; frame.size.height = 96; }
+    panel.frame = frame; panel.layer.cornerRadius = MIN(radius, frame.size.height/2); panel.alpha = opacity;
 }
 static void NDReload(CFNotificationCenterRef c, void *o, CFStringRef n, const void *object, CFDictionaryRef info) {
-    CFPreferencesAppSynchronize(CFSTR("com.theipos.dock"));
-    NSDictionary *values = CFBridgingRelease(CFPreferencesCopyMultiple(NULL, CFSTR("com.theipos.dock"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
-    dockEnabled = values[@"enabled"] ? [values[@"enabled"] boolValue] : YES;
-    radius = values[@"radius"] ? MAX(12, MIN(44, [values[@"radius"] doubleValue])) : 30;
-    opacity = values[@"opacity"] ? MAX(0.15, MIN(1, [values[@"opacity"] doubleValue])) : 0.85;
-    dispatch_async(dispatch_get_main_queue(), ^{ for (UIView *dock in dockViews) [dock setNeedsLayout]; });
+    dispatch_async(dispatch_get_main_queue(), ^{
+        CFPreferencesAppSynchronize(CFSTR("com.theipos.dock"));
+        NSDictionary *v = CFBridgingRelease(CFPreferencesCopyMultiple(NULL, CFSTR("com.theipos.dock"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
+        dockEnabled = v[@"enabled"] ? [v[@"enabled"] boolValue] : YES;
+        radius = v[@"radius"] ? MAX(12,MIN(44,[v[@"radius"] doubleValue])) : 32;
+        opacity = v[@"opacity"] ? MAX(0.15,MIN(1,[v[@"opacity"] doubleValue])) : 0.9;
+        for (UIView *dock in dockViews) [dock setNeedsLayout];
+    });
 }
 %hook SBDockView
 - (void)layoutSubviews { %orig; [dockViews addObject:self]; NDLayout(self); }
@@ -55,21 +66,16 @@ static void NDReload(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
 + (unsigned long long)iconColumnsForInterfaceOrientation:(long long)orientation { return 5; }
 - (CGPoint)originForIconAtCoordinate:(struct NDCoordinate)coordinate numberOfIcons:(unsigned long long)count {
     CGPoint native = %orig;
-    if (count != 5 || coordinate.col < 1 || coordinate.col > 5) return native;
-    // Keep native vertical positioning. Distribute real icon cells across the available width.
-    struct NDCoordinate first = {coordinate.row, 1};
-    CGPoint anchor = %orig(first, 4);
-    CGFloat iconWidth = 60, width = self.bounds.size.width;
-    if (width < 5 * iconWidth) return native;
-    CGFloat gap = (width - 5 * iconWidth) / 6;
-    return CGPointMake(gap + (coordinate.col - 1) * (iconWidth + gap), anchor.y);
+    if (count != 5 || coordinate.col < 1 || coordinate.col > 5 || self.bounds.size.width < 100) return native;
+    struct NDCoordinate first = {coordinate.row,1}; CGPoint anchor = %orig(first,4);
+    CGFloat width = self.bounds.size.width, cell = width/5;
+    return CGPointMake((coordinate.col-0.5)*cell-30,anchor.y);
 }
 %end
 %ctor {
     @autoreleasepool {
         if (NSProcessInfo.processInfo.operatingSystemVersion.majorVersion != 12) return;
-        dockViews = [NSHashTable weakObjectsHashTable];
-        NDReload(NULL, NULL, NULL, NULL, NULL); %init;
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, NDReload, CFSTR("com.theipos.dock/changed"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        dockViews = [NSHashTable weakObjectsHashTable]; NDReload(NULL,NULL,NULL,NULL,NULL); %init;
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),NULL,NDReload,CFSTR("com.theipos.dock/changed"),NULL,CFNotificationSuspensionBehaviorDeliverImmediately);
     }
 }

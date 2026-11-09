@@ -9,6 +9,14 @@ enum FrameShape: Int, CaseIterable {
 
 enum CropMode: Int { case dynamic, fixed }
 
+enum CameraZoom {
+    static func clamp(_ value: Double) -> Double { value.isFinite ? min(120, max(1, value)) : 1 }
+    static func crop(_ bounds: CGRect, factor: Double) -> CGRect {
+        let factor = CGFloat(clamp(factor))
+        return CGRect(x: bounds.midX - bounds.width / factor / 2, y: bounds.midY - bounds.height / factor / 2, width: bounds.width / factor, height: bounds.height / factor)
+    }
+}
+
 struct HorizonGeometry {
     let crop: CGRect
     let zoom: Double

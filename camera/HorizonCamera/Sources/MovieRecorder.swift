@@ -13,6 +13,7 @@ final class MovieRecorder {
     private var firstTime: CMTime?
     private var lastVideoTime: CMTime?
     private(set) var failure: Error?
+    private(set) var acceptedVideoFrames = 0
 
     init(url: URL, size: CGSize, audioSettings: [String: Any]?, context: CIContext) throws {
         self.url = url; self.size = size; self.context = context
@@ -42,7 +43,7 @@ final class MovieRecorder {
     func append(image: CIImage, at time: CMTime) {
         guard failure == nil, time.isValid else { return }
         if firstTime == nil {
-            guard writer.startWriting() else { failure = writer.error; return }
+            guard writer.startWriting() else { failure = writer.error ?? CameraFailure.message("Запись не запущена"); return }
             writer.startSession(atSourceTime: time); firstTime = time
         }
         guard writer.status == .writing, video.isReadyForMoreMediaData,
@@ -54,7 +55,7 @@ final class MovieRecorder {
             failure = CameraFailure.message("Недостаточно памяти для записи"); return
         }
         context.render(image, to: buffer, bounds: CGRect(origin: .zero, size: size), colorSpace: CGColorSpaceCreateDeviceRGB())
-        if adaptor.append(buffer, withPresentationTime: time) { lastVideoTime = time }
+        if adaptor.append(buffer, withPresentationTime: time) { lastVideoTime = time; acceptedVideoFrames += 1 }
         else { failure = writer.error ?? CameraFailure.message("Кадр не записан") }
     }
 
