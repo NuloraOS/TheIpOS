@@ -1,9 +1,9 @@
 Package: com.theipos.motion
-Name: TheIpOS Motion
-Version: 0.1.0
+Name: Nulora Motion
+Version: 0.2.0
 Architecture: iphoneos-arm
 Depends: firmware (>= 12.0), mobilesubstrate, preferenceloader
-Description: Adjustable short motion trails for UIKit animations and scrolling. Does not increase display refresh rate.
-Maintainer: TheIpOS
-Author: TheIpOS
-Section: iOS 26
+Description: Adjustable directional motion blur for UIKit animations and scrolling. Does not increase display refresh rate.
+Maintainer: Nulora
+Author: Nulora
+Section: Motion Blur

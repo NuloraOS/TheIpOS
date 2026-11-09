@@ -1,79 +1,131 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <CoreImage/CoreImage.h>
 #import <objc/runtime.h>
 
-static BOOL enabled = YES, rendering = NO;
-static CGFloat strength = 0.18;
-static CFTimeInterval lastFrame = 0;
-static char ghostKey;
+static BOOL enabled = YES, rendering = NO, homeEnabled = YES, appsEnabled = YES;
+static CGFloat strength = 0.55;
+static char driverKey, ghostKey;
+static BOOL HMHome(void) { return [NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]; }
 @interface HMGhostView : UIImageView @end
 @implementation HMGhostView @end
+@interface HMDriver : NSObject
+@property(nonatomic,weak) UIWindow *window;
+@property(nonatomic,strong) CADisplayLink *link;
+@property(nonatomic) CFTimeInterval until;
+@property(nonatomic) CGPoint direction;
+- (void)tick:(CADisplayLink *)sender;
+- (void)stop;
+@end
 
-static void HMReload(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef info) {
+static void HMReload(CFNotificationCenterRef c, void *o, CFStringRef n, const void *object, CFDictionaryRef info) {
     CFPreferencesAppSynchronize(CFSTR("com.theipos.motion"));
-    CFPropertyListRef on = CFPreferencesCopyAppValue(CFSTR("enabled"), CFSTR("com.theipos.motion"));
-    CFPropertyListRef amount = CFPreferencesCopyAppValue(CFSTR("strength"), CFSTR("com.theipos.motion"));
-    enabled = on ? [(__bridge id)on boolValue] : YES;
-    strength = amount ? MIN(0.35, MAX(0, [(__bridge id)amount doubleValue])) : 0.18;
-    if (on) CFRelease(on); if (amount) CFRelease(amount);
+    NSDictionary *values = CFBridgingRelease(CFPreferencesCopyMultiple(NULL, CFSTR("com.theipos.motion"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
+    enabled = values[@"enabled"] ? [values[@"enabled"] boolValue] : YES;
+    strength = values[@"strength"] ? MIN(1, MAX(0, [values[@"strength"] doubleValue])) : 0.55;
+    homeEnabled = values[@"home"] ? [values[@"home"] boolValue] : YES;
+    appsEnabled = values[@"apps"] ? [values[@"apps"] boolValue] : YES;
 }
-
-static void HMTrail(UIWindow *window, CGPoint direction) {
-    if (!enabled || strength < 0.005 || rendering || !NSThread.isMainThread || !window.isKeyWindow || window.hidden || window.windowLevel != UIWindowLevelNormal) return;
-    if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
-    CFTimeInterval now = CACurrentMediaTime();
-    if (now - lastFrame < 0.11 || window.bounds.size.width < 1) return;
-    lastFrame = now; rendering = YES;
+static BOOL HMAllowed(UIWindow *window) {
+    if (!enabled || strength < 0.005 || rendering || !NSThread.isMainThread || !window || window.hidden || window.alpha < 0.1 || window.bounds.size.width < 1) return NO;
+    UIApplication *app = UIApplication.sharedApplication;
+    if (!app.protectedDataAvailable) return NO;
+    if (HMHome()) return homeEnabled && window.windowLevel == UIWindowLevelNormal;
+    return appsEnabled && app.applicationState == UIApplicationStateActive && window.isKeyWindow && window.windowLevel == UIWindowLevelNormal;
+}
+static void HMFrame(UIWindow *window, CGPoint direction) {
+    if (!HMAllowed(window)) return;
+    rendering = YES;
     @try {
         HMGhostView *old = objc_getAssociatedObject(window, &ghostKey);
         [old removeFromSuperview]; old.image = nil;
-        // Bounded low-resolution, in-memory snapshot. No files, screen recording or network.
-        CGFloat scale = MIN(0.5, 200.0 / window.bounds.size.width);
+        CGFloat scale = MIN(0.5, 240.0 / window.bounds.size.width);
         UIGraphicsBeginImageContextWithOptions(window.bounds.size, NO, scale);
-        CGContextRef context = UIGraphicsGetCurrentContext();
-        if (context) [window.layer renderInContext:context];
-        UIImage *snapshot = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext();
-        if (snapshot) {
-            HMGhostView *ghost = [[HMGhostView alloc] initWithImage:snapshot]; ghost.frame = window.bounds;
-            ghost.userInteractionEnabled = NO; ghost.accessibilityElementsHidden = YES; ghost.alpha = strength;
-            objc_setAssociatedObject(window, &ghostKey, ghost, OBJC_ASSOCIATION_RETAIN_NONATOMIC); [window addSubview:ghost];
-            CGFloat dx = MAX(-10, MIN(10, direction.x)), dy = MAX(-10, MIN(10, direction.y));
-            [UIView animateWithDuration:0.065 + strength * 0.12 delay:0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction animations:^{
-                ghost.alpha = 0; ghost.transform = CGAffineTransformMakeTranslation(dx, dy);
-            } completion:^(BOOL finished) {
-                [ghost removeFromSuperview]; ghost.image = nil;
-                if (objc_getAssociatedObject(window, &ghostKey) == ghost) objc_setAssociatedObject(window, &ghostKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            }];
+        CGContextRef drawing = UIGraphicsGetCurrentContext();
+        if (drawing) [window.layer renderInContext:drawing];
+        UIImage *snapshot = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        if (snapshot.CGImage) {
+            static CIContext *context;
+            static dispatch_once_t once;
+            dispatch_once(&once, ^{ context = [CIContext contextWithOptions:@{kCIContextCacheIntermediates:@NO}]; });
+            CIImage *input = [CIImage imageWithCGImage:snapshot.CGImage];
+            CGFloat distance = hypot(direction.x, direction.y);
+            // Actual directional convolution, not just a duplicated translucent frame.
+            CIFilter *blur = [CIFilter filterWithName:@"CIMotionBlur"];
+            [blur setValue:[input imageByClampingToExtent] forKey:kCIInputImageKey];
+            [blur setValue:@((4 + strength * 24) * scale) forKey:kCIInputRadiusKey];
+            [blur setValue:@(distance > 0.01 ? atan2(-direction.y, direction.x) : 0) forKey:kCIInputAngleKey];
+            CIImage *output = [blur.outputImage imageByCroppingToRect:input.extent];
+            CGImageRef image = output ? [context createCGImage:output fromRect:input.extent] : NULL;
+            if (image) {
+                HMGhostView *ghost = [[HMGhostView alloc] initWithImage:[UIImage imageWithCGImage:image]];
+                CGImageRelease(image);
+                ghost.frame = window.bounds; ghost.userInteractionEnabled = NO; ghost.accessibilityElementsHidden = YES;
+                ghost.alpha = 0.20 + strength * 0.48;
+                objc_setAssociatedObject(window, &ghostKey, ghost, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                [window addSubview:ghost];
+                [UIView animateWithDuration:0.10 delay:0 options:UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState animations:^{ ghost.alpha = 0; } completion:^(BOOL done) {
+                    [ghost removeFromSuperview]; ghost.image = nil;
+                    if (objc_getAssociatedObject(window, &ghostKey) == ghost) objc_setAssociatedObject(window, &ghostKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                }];
+            }
         }
-    } @catch (__unused NSException *error) { /* An unavailable surface leaves the original animation intact. */ }
+    } @catch (__unused NSException *e) { /* Preserve the underlying UI on unsupported surfaces. */ }
     rendering = NO;
 }
-
+@implementation HMDriver
+- (void)tick:(CADisplayLink *)sender {
+    if (CACurrentMediaTime() >= self.until || !HMAllowed(self.window)) { [self stop]; return; }
+    HMFrame(self.window, self.direction);
+}
+- (void)stop {
+    [self.link invalidate]; self.link = nil;
+    HMGhostView *old = objc_getAssociatedObject(self.window, &ghostKey);
+    [old removeFromSuperview]; old.image = nil;
+    if (self.window) { objc_setAssociatedObject(self.window, &ghostKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); objc_setAssociatedObject(self.window, &driverKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
+}
+@end
+static void HMBegin(UIWindow *window, CGPoint direction, CFTimeInterval duration) {
+    if (!HMAllowed(window)) return;
+    HMDriver *driver = objc_getAssociatedObject(window, &driverKey);
+    if (!driver) {
+        driver = [HMDriver new]; driver.window = window;
+        objc_setAssociatedObject(window, &driverKey, driver, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        driver.link = [CADisplayLink displayLinkWithTarget:driver selector:@selector(tick:)];
+        driver.link.preferredFramesPerSecond = 20;
+        [driver.link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+    }
+    driver.direction = direction;
+    driver.until = CACurrentMediaTime() + MIN(0.7, MAX(0.12, duration));
+}
 %hook UIScrollView
 - (void)setContentOffset:(CGPoint)offset {
-    CGPoint old = self.contentOffset;
-    if (self.dragging || self.decelerating) HMTrail(self.window, CGPointMake((old.x - offset.x) * 0.15, (old.y - offset.y) * 0.15));
+    CGPoint previous = self.contentOffset;
     %orig;
+    if (self.dragging || self.decelerating) HMBegin(self.window, CGPointMake(offset.x - previous.x, offset.y - previous.y), 0.12);
+}
+- (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated {
+    CGPoint previous = self.contentOffset;
+    %orig;
+    if (animated) HMBegin(self.window, CGPointMake(offset.x - previous.x, offset.y - previous.y), 0.35);
 }
 %end
-
 %hook CALayer
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
-    if (!rendering && ![self.delegate isKindOfClass:[HMGhostView class]] && [animation isKindOfClass:[CABasicAnimation class]] && animation.duration >= 0.08 && animation.duration <= 1.2) {
-        NSString *path = ((CABasicAnimation *)animation).keyPath;
+    %orig;
+    if (!rendering && [animation isKindOfClass:[CAPropertyAnimation class]] && animation.duration >= 0.08 && animation.duration <= 1.5) {
+        NSString *path = ((CAPropertyAnimation *)animation).keyPath;
         if ([path hasPrefix:@"position"] || [path hasPrefix:@"transform"] || [path hasPrefix:@"bounds"]) {
-            id delegate = self.delegate;
-            if ([delegate isKindOfClass:[UIView class]]) HMTrail(((UIView *)delegate).window, CGPointZero);
+            id view = self.delegate;
+            if ([view isKindOfClass:[UIView class]] && ![view isKindOfClass:[HMGhostView class]]) HMBegin(((UIView *)view).window, CGPointMake(1, 0), animation.duration);
         }
     }
-    %orig;
 }
 %end
-
 %ctor {
     @autoreleasepool {
-        HMReload(NULL, NULL, NULL, NULL, NULL);
-        %init;
+        HMReload(NULL, NULL, NULL, NULL, NULL); %init;
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, HMReload, CFSTR("com.theipos.motion/changed"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     }
 }

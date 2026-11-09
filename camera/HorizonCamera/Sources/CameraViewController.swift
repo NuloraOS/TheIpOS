@@ -42,7 +42,7 @@ final class CameraViewController: UIViewController {
         note.numberOfLines = 2; status.numberOfLines = 2
         clock.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold); clock.backgroundColor = UIColor.black.withAlphaComponent(0.55); clock.layer.cornerRadius = 12; clock.clipsToBounds = true
         for button in [normal, horizon] { button.titleLabel?.font = .systemFont(ofSize: 10, weight: .semibold); view.addSubview(button); button.addTarget(self, action: #selector(changeMode(_:)), for: .touchUpInside) }
-        normal.setTitle("ОБЫЧНЫЙ РЕЖИМ", for: .normal); horizon.setTitle("HORIZON LOCK", for: .normal)
+        normal.setTitle("ОБЫЧНЫЙ", for: .normal); horizon.setTitle("СТАБИЛИЗАЦИЯ", for: .normal)
         for button in [wide, ultra] { button.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold); button.layer.cornerRadius = 19; view.addSubview(button); button.addTarget(self, action: #selector(changeLens(_:)), for: .touchUpInside) }
         wide.setTitle("1×", for: .normal); ultra.setTitle("0,5×", for: .normal)
         configure(gallery, symbol: "photo.on.rectangle", fallback: "▧", action: #selector(openGallery))
@@ -64,6 +64,18 @@ final class CameraViewController: UIViewController {
     }
 
     override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); engine.start(); preview.isPaused = false }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !UserDefaults.standard.bool(forKey: "stabilizationOfferShown"), presentedViewController == nil else { return }
+        let offer = UIAlertController(title: "Включить стабилизацию?", message: "Горизонт выравнивается по датчикам движения. Держите телефон вертикально и плавно наклоните влево или вправо: угол появится над кнопкой записи. Края кадра обрезаются; это не замена оптической стабилизации.", preferredStyle: .alert)
+        for (title, enabled) in [("Включить", true), ("Обычная съёмка", false)] {
+            offer.addAction(UIAlertAction(title: title, style: .default) { _ in
+                UserDefaults.standard.set(true, forKey: "stabilizationOfferShown")
+                self.options.horizon = enabled; self.commit()
+            })
+        }
+        present(offer, animated: true)
+    }
     override func viewWillDisappear(_ animated: Bool) { super.viewWillDisappear(animated); engine.stop(); preview.isPaused = true }
     deinit { NotificationCenter.default.removeObserver(self) }
 
@@ -111,7 +123,7 @@ final class CameraViewController: UIViewController {
         flip.isEnabled = !busy; gallery.isEnabled = !busy; settings.isEnabled = !busy
         torch.tintColor = current.torch ? accent : .white
         inner.backgroundColor = accent; record.isEnabled = current.ready && !current.finishing; record.alpha = record.isEnabled ? 1 : 0.4
-        status.text = current.message; clock.isHidden = !current.recording
+        status.text = options.horizon && current.ready ? "\(current.motionStatus) · \(Int(current.tilt.rounded()))°\n\(current.message)" : current.message; clock.isHidden = !current.recording
         let seconds = Int(current.duration); clock.text = String(format: "● %02d:%02d", seconds / 60, seconds % 60); clock.textColor = accent
         UIView.animate(withDuration: 0.24, delay: 0, options: [.beginFromCurrentState, .curveEaseInOut], animations: { self.view.setNeedsLayout(); self.view.layoutIfNeeded() })
     }
@@ -136,7 +148,11 @@ final class CameraViewController: UIViewController {
         let nav = UINavigationController(rootViewController: library); nav.modalPresentationStyle = .fullScreen; present(nav, animated: true)
     }
     @objc private func customize() {
-        let menu = UIAlertController(title: "Оформление", message: "Цвет элементов камеры", preferredStyle: .actionSheet)
+        let menu = UIAlertController(title: "Nulora Camera", message: "Стабилизация удерживает горизонт при наклоне. Дрожание и шаги полностью не устраняются. Цвет светодиодов True Tone системой выбирается автоматически.", preferredStyle: .actionSheet)
+        for (name, value) in [("Вспышка: выключить", Float(0)), ("Вспышка: мягкая", Float(0.15)), ("Вспышка: средняя", Float(0.4)), ("Вспышка: яркая", Float(0.75))] {
+            menu.addAction(UIAlertAction(title: name, style: .default) { _ in self.engine.setTorchBrightness(value) })
+        }
+        menu.addAction(UIAlertAction(title: options.horizon ? "Выключить стабилизацию" : "Включить стабилизацию", style: .default) { _ in self.options.horizon.toggle(); self.commit() })
         for (name, hex) in [("Жёлтый, как в видео", "FFBD00"), ("Фиолетовый", "8B5CF6"), ("Зелёный", "33C887"), ("Коралловый", "FF6666")] {
             menu.addAction(UIAlertAction(title: name, style: .default) { _ in
                 let value = UInt32(hex, radix: 16)!

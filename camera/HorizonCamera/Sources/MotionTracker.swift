@@ -8,14 +8,21 @@ final class MotionTracker {
     private var history: [(Double, Double)] = []
     private var previous: Double?
     private var continuous = 0.0
+    private var failure: String?
     var available: Bool { manager.isDeviceMotionAvailable }
+    var diagnostic: (ready: Bool, error: String?) {
+        lock.lock(); defer { lock.unlock() }
+        return (!history.isEmpty, failure)
+    }
 
     func start() {
         guard available, !manager.isDeviceMotionActive else { return }
-        lock.lock(); history.removeAll(); previous = nil; continuous = 0; lock.unlock()
+        lock.lock(); history.removeAll(); previous = nil; continuous = 0; failure = nil; lock.unlock()
         manager.deviceMotionUpdateInterval = 1.0 / 100
-        manager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { [weak self] motion, _ in
-            guard let self = self, let motion = motion else { return }
+        manager.startDeviceMotionUpdates(to: queue) { [weak self] motion, error in
+            guard let self = self else { return }
+            if let error = error { self.lock.lock(); self.failure = error.localizedDescription; self.lock.unlock() }
+            guard let motion = motion else { return }
             let g = motion.gravity
             // When facing directly up/down gravity cannot reliably define image roll.
             guard hypot(g.x, g.y) > 0.18 else { return }
@@ -26,6 +33,7 @@ final class MotionTracker {
                 self.continuous += delta
             } else { self.continuous = angle }
             self.previous = angle
+            self.failure = nil
             self.history.append((motion.timestamp, self.continuous))
             if self.history.count > 240 { self.history.removeFirst(self.history.count - 240) }
             self.lock.unlock()

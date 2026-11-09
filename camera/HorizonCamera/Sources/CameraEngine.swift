@@ -14,6 +14,8 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         var ready = false, recording = false, finishing = false, ultraWide = false, torch = false, front = false, ultraSelected = false, motionAvailable = true
         var message = "Подготовка камеры…"
         var duration = 0.0
+        var motionReady = false, tilt = 0.0
+        var motionStatus = "Ожидание датчиков…"
     }
     let session = AVCaptureSession()
     let queue = DispatchQueue(label: "camera.capture", qos: .userInitiated)
@@ -28,7 +30,7 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     private var cameraInput: AVCaptureDeviceInput?
     private var recorder: MovieRecorder?
     private var configured = false, audioEnabled = false
-    private var zoom = 1.0, startedAt: Double?, lastStateTime = 0.0
+    private var zoom = 1.0, startedAt: Double?, lastStateTime = 0.0, lastMotionStatus = 0.0
     private var latestImage: CIImage?
 
     func start() {
@@ -128,6 +130,18 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         }
     }
 
+    func setTorchBrightness(_ value: Float) {
+        queue.async {
+            guard let device = self.cameraInput?.device, device.hasTorch, device.isTorchAvailable else { return }
+            do {
+                try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
+                if value <= 0 { device.torchMode = .off }
+                else { try device.setTorchModeOn(level: min(AVCaptureDevice.maxAvailableTorchLevel, max(0.01, value))) }
+                self.state.torch = value > 0; self.publish()
+            } catch { self.fail(error) }
+        }
+    }
+
     func toggleRecording() {
         queue.async {
             guard self.state.ready && !self.state.finishing else { return }
@@ -186,10 +200,20 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             let time = CMSampleBufferGetPresentationTimeStamp(sample)
             let input = CIImage(cvPixelBuffer: buffer)
             let roll = options.horizon ? motion.angle(at: CMTimeGetSeconds(time)) : 0
+            if CMTimeGetSeconds(time) - lastMotionStatus > 0.3 {
+                lastMotionStatus = CMTimeGetSeconds(time)
+                let diagnostic = motion.diagnostic
+                state.motionReady = diagnostic.ready; state.tilt = roll * 180 / .pi
+                state.motionStatus = !options.horizon ? "Стабилизация выключена" :
+                    diagnostic.error.map { "Датчики: \($0)" } ?? (diagnostic.ready ? "Стабилизация включена" : "Ожидание датчиков — держите iPhone вертикально")
+                publish()
+            }
             let geometry = HorizonGeometry.make(source: input.extent.size, output: options.shape.size, angle: roll, mode: options.horizon ? options.crop : .dynamic, previousZoom: options.horizon ? zoom : 1)
             zoom = geometry.zoom
             let corrected = input.transformed(by: CGAffineTransform(translationX: -input.extent.midX, y: -input.extent.midY))
-                .transformed(by: CGAffineTransform(rotationAngle: CGFloat(state.front ? roll : -roll)))
+                // The delivered portrait buffer is explicitly unmirrored for both cameras.
+                // Core Image uses a bottom-left origin: gravity roll is the correcting rotation.
+                .transformed(by: CGAffineTransform(rotationAngle: CGFloat(roll)))
                 .cropped(to: geometry.crop)
                 .transformed(by: CGAffineTransform(translationX: -geometry.crop.minX, y: -geometry.crop.minY))
                 .transformed(by: CGAffineTransform(scaleX: options.shape.size.width / geometry.crop.width, y: options.shape.size.height / geometry.crop.height))
