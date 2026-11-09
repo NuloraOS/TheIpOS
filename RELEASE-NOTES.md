@@ -1,9 +1,9 @@
-Nulora 0.2.0 — experimental builds for iPhone 5s / iOS 12 / Chimera.
+Nulora 0.3.0 — experimental iOS 12 / Chimera builds.
 
-- Camera: remove mandatory SwiftUI dependency incompatible with iOS 12; verify every embedded binary before packaging. Visible stabilization status, sensor errors and tilt; corrected unmirrored-frame rotation; torch brightness controls.
-- Motion: directional Core Image blur, SpringBoard support, scrolling and animated offsets, separate home/app switches.
-- Dock: new iOS 12-only package, five icon slots, rounded translucent panel, radius and opacity preferences.
-- Original matching camera and preferences icons.
-- Direct GitHub Release downloads as an alternative to Pages timeouts.
+- Camera: white and warm yellow SCREEN illumination, with live camera preview and controls. The rear True Tone LED colour is not changed. Brightness control for the rear torch remains available.
+- Nulora Glass: new independent iOS 12-only tweak and preferences for UIKit bars, status bar background and notification banners. Genuine clock/battery remain intact. This is glass-inspired styling, not Apple's native Liquid Glass renderer or complete iOS 26/27 compatibility.
+- Matching Glass preferences icon.
+- Camera iOS 12 launch dependency checks, stabilization prompt and tilt diagnostics retained.
+- Motion and five-slot Dock retained, independent settings.
 
-Compiled packages are not a physical-device compatibility test. No forced respring, reboot, installation or kernel changes are performed by the build. After installing a tweak, relaunch apps and perform a manual respring. This does not add a 120 Hz display or independent amber/white LED control.
+Physical-device testing is still required. After installing a tweak, relaunch apps and perform a manual respring. Builds do not force respring, reboot, installation or kernel changes.

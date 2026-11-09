@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.theipos.glass.prefs</string><key>CFBundleName</key><string>NuloraGlassPrefs</string><key>CFBundleExecutable</key><string>NuloraGlassPrefs</string><key>CFBundlePackageType</key><string>BNDL</string><key>NSPrincipalClass</key><string>NGPrefsController</string></dict></plist>

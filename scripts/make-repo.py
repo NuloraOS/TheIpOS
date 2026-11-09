@@ -11,8 +11,8 @@ categories = [('icons', 'Icons'), ('camera', 'Camera'), ('utility', 'Utility'), 
 packages = subprocess.check_output(['dpkg-scanpackages', '--multiversion', '.', '/dev/null'], cwd=root)
 # Keep the old DEB path usable without duplicating its APT record.
 packages = b'\n\n'.join(block for block in packages.split(b'\n\n') if block.strip() and b'Filename: ./ios26/' not in block) + b'\n\n'
-if any(('Package: ' + name).encode() not in packages for name in ['com.theipos.camera', 'com.theipos.motion', 'com.theipos.dock']):
-    raise SystemExit('All three compiled packages must be present before publishing')
+if any(('Package: ' + name).encode() not in packages for name in ['com.theipos.camera', 'com.theipos.motion', 'com.theipos.dock', 'com.theipos.glass']):
+    raise SystemExit('All four compiled packages must be present before publishing')
 (root / 'Packages').write_bytes(packages)
 (root / 'Packages.gz').write_bytes(gzip.compress(packages, mtime=0))
 (root / 'Packages.bz2').write_bytes(bz2.compress(packages))
@@ -36,13 +36,13 @@ for folder, title in categories:
         name = subprocess.check_output(['dpkg-deb', '-f', str(file), 'Name'], text=True).strip()
         version = subprocess.check_output(['dpkg-deb', '-f', str(file), 'Version'], text=True).strip()
         sha = hashlib.sha256(file.read_bytes()).hexdigest()
-        kind = 'camera' if folder == 'camera' else ('motion' if folder == 'motion-blur' else 'dock')
-        mirror = 'https://github.com/NuloraOS/TheIpOS/releases/download/v0.2.0/' + file.name
+        kind = 'camera' if folder == 'camera' else ('motion' if folder == 'motion-blur' else ('glass' if 'glass' in file.name else 'dock'))
+        mirror = 'https://github.com/NuloraOS/TheIpOS/releases/download/v0.3.0/' + file.name
         links += f'<article><img src="../icons/nulora-{kind}.png" width="64" height="64" style="border-radius:15px" alt=""><h2>{html.escape(name)}</h2><p>Версия {html.escape(version)} · iPhone 5s / iOS 12 / Chimera</p><a href="{html.escape(file.name)}" download>Скачать DEB</a> · <a href="{html.escape(mirror)}">Другой сервер</a><p><small>При ошибке времени ожидания используйте другой сервер.<br>SHA-256: <code>{sha}</code></small></p></article>'
     if not links:
         links = '<p>Пакетов пока нет.</p>'
     if folder == 'icons':
-        links = '<p>Иконки Nulora в одной теме.</p>' + ''.join(f'<img src="nulora-{kind}.png" width="96" height="96" style="border-radius:22px;margin:8px" alt="{kind}">' for kind in ['camera', 'motion', 'dock'])
+        links = '<p>Иконки Nulora в одной теме.</p>' + ''.join(f'<img src="nulora-{kind}.png" width="96" height="96" style="border-radius:22px;margin:8px" alt="{kind}">' for kind in ['camera', 'motion', 'dock', 'glass'])
     (directory / 'index.html').write_text(page(title, f'<nav><a href="../">← Nulora</a></nav><h1>{title}</h1>{links}'), encoding='utf-8')
 content = '<h1>Nulora</h1><p>Приложения и оформление для джейлбрейка.</p><nav>' + ''.join(f'<a href="{folder}/">{title}</a>' for folder, title in categories) + '</nav>'
 content += '<p>Добавь адрес этой страницы в Sileo как репозиторий. Первые пакеты — экспериментальные сборки под iOS 12 / Chimera. Эффект motion blur не повышает частоту экрана.</p>'

@@ -15,6 +15,8 @@ final class CameraViewController: UIViewController {
     private let flip = UIButton(type: .system), gallery = UIButton(type: .system)
     private let torch = UIButton(type: .system), grid = UIButton(type: .system), settings = UIButton(type: .system)
     private let topShade = CAGradientLayer(), bottomShade = CAGradientLayer()
+    private let screenLight = CAShapeLayer()
+    private var screenLightMode = 0
 
     override var prefersStatusBarHidden: Bool { false }
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
@@ -31,6 +33,8 @@ final class CameraViewController: UIViewController {
         topShade.colors = [UIColor.black.withAlphaComponent(0.9).cgColor, UIColor.clear.cgColor]
         bottomShade.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.98).cgColor]
         view.layer.addSublayer(topShade); view.layer.addSublayer(bottomShade)
+        screenLight.fillRule = .evenOdd; screenLight.isHidden = true
+        view.layer.insertSublayer(screenLight, below: topShade)
         header.axis = .horizontal; header.alignment = .center; header.spacing = 12
         configure(grid, symbol: "grid", fallback: "▦", action: #selector(toggleGrid))
         configure(torch, symbol: "bolt.fill", fallback: "ϟ", action: #selector(toggleTorch))
@@ -86,6 +90,10 @@ final class CameraViewController: UIViewController {
         super.viewDidLayoutSubviews()
         let b = view.bounds, safe = view.safeAreaInsets
         preview.frame = b
+        screenLight.frame = b
+        let lightPath = UIBezierPath(rect: b)
+        lightPath.append(UIBezierPath(roundedRect: b.insetBy(dx: 28, dy: 104), cornerRadius: 28))
+        screenLight.path = lightPath.cgPath
         topShade.frame = CGRect(x: 0, y: 0, width: b.width, height: safe.top + 175)
         bottomShade.frame = CGRect(x: 0, y: b.height - safe.bottom - 245, width: b.width, height: safe.bottom + 245)
         header.frame = CGRect(x: 18, y: safe.top + 14, width: b.width - 36, height: 36)
@@ -155,6 +163,14 @@ final class CameraViewController: UIViewController {
         let menu = UIAlertController(title: "Nulora Camera", message: "Стабилизация удерживает горизонт при наклоне. Дрожание и шаги полностью не устраняются. Цвет светодиодов True Tone системой выбирается автоматически.", preferredStyle: .actionSheet)
         for (name, value) in [("Вспышка: выключить", Float(0)), ("Вспышка: мягкая", Float(0.15)), ("Вспышка: средняя", Float(0.4)), ("Вспышка: яркая", Float(0.75))] {
             menu.addAction(UIAlertAction(title: name, style: .default) { _ in self.engine.setTorchBrightness(value) })
+        }
+        for (title, mode) in [("Экранный свет: белый", 1), ("Экранный свет: тёплый жёлтый", 2), ("Выключить экранный свет", 0)] {
+            menu.addAction(UIAlertAction(title: title, style: .default) { _ in
+                self.screenLightMode = mode
+                self.screenLight.fillColor = (mode == 2 ? UIColor(red: 1, green: 0.73, blue: 0.30, alpha: 1) : UIColor.white).cgColor
+                self.screenLight.isHidden = mode == 0
+                self.status.text = mode == 0 ? self.current.message : "Экранный свет — цвет заднего светодиода не изменяется"
+            })
         }
         menu.addAction(UIAlertAction(title: options.horizon ? "Выключить стабилизацию" : "Включить стабилизацию", style: .default) { _ in self.options.horizon.toggle(); self.commit() })
         for (name, hex) in [("Жёлтый, как в видео", "FFBD00"), ("Фиолетовый", "8B5CF6"), ("Зелёный", "33C887"), ("Коралловый", "FF6666")] {

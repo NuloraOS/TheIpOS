@@ -1,0 +1,9 @@
+Package: com.theipos.glass
+Name: Nulora Glass
+Version: 0.3.0
+Architecture: iphoneos-arm
+Depends: firmware (>= 12.0), firmware (<< 13.0), mobilesubstrate, preferenceloader
+Description: Glass-inspired UIKit panels, notification banners and real status bar backgrounds on iOS 12. Not Apple's native Liquid Glass renderer.
+Maintainer: Nulora
+Author: Nulora
+Section: Themes

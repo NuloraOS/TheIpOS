@@ -34,6 +34,10 @@ jobs:
         env:
           THEOS: ${{ runner.temp }}/theos
         run: gmake -C ios26/NuloraDock FINALPACKAGE=1 package
+      - name: Build glass and preferences
+        env:
+          THEOS: ${{ runner.temp }}/theos
+        run: gmake -C ios26/NuloraGlass FINALPACKAGE=1 package
       - name: Inspect packages
         run: |
           mkdir -p artifacts/camera artifacts/ios26 artifacts/motion-blur artifacts/utility artifacts/icons artifacts/wallpapers
@@ -41,6 +45,7 @@ jobs:
           cp ios26/HorizonMotion/packages/*.deb artifacts/ios26/
           cp ios26/HorizonMotion/packages/*.deb artifacts/motion-blur/
           cp ios26/NuloraDock/packages/*.deb artifacts/utility/
+          cp ios26/NuloraGlass/packages/*.deb artifacts/utility/
           cp icons/nulora-*.png artifacts/icons/
           for package in artifacts/camera/*.deb artifacts/motion-blur/*.deb artifacts/utility/*.deb; do
             dpkg-deb --info "$package"
@@ -55,8 +60,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.2.0 >/dev/null 2>&1 || gh release create v0.2.0 --title 'Nulora 0.2.0' --notes-file RELEASE-NOTES.md
-          gh release upload v0.2.0 artifacts/camera/*.deb artifacts/motion-blur/*.deb artifacts/utility/*.deb --clobber
+          gh release view v0.3.0 >/dev/null 2>&1 || gh release create v0.3.0 --title 'Nulora 0.3.0' --notes-file RELEASE-NOTES.md
+          gh release upload v0.3.0 artifacts/camera/*.deb artifacts/motion-blur/*.deb artifacts/utility/*.deb --clobber
   repository:
     needs: packages
     runs-on: ubuntu-latest

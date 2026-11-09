@@ -1,6 +1,6 @@
 Package: com.theipos.dock
 Name: Nulora Dock
-Version: 0.2.0
+Version: 0.3.0
 Architecture: iphoneos-arm
 Depends: firmware (>= 12.0), firmware (<< 13.0), mobilesubstrate, preferenceloader
 Description: Rounded translucent home screen dock with five app slots and separate preferences. iOS 12 only.

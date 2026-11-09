@@ -1,6 +1,6 @@
 Package: com.theipos.motion
 Name: Nulora Motion
-Version: 0.2.0
+Version: 0.3.0
 Architecture: iphoneos-arm
 Depends: firmware (>= 12.0), mobilesubstrate, preferenceloader
 Description: Adjustable directional motion blur for UIKit animations and scrolling. Does not increase display refresh rate.

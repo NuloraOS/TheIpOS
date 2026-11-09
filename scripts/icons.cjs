@@ -7,6 +7,7 @@ function box(x,y,cx,cy,w,h,r){const a=Math.abs(x-cx)-w/2+r,b=Math.abs(y-cy)-h/2+
 function distance(kind,x,y){
  if(kind==='camera')return Math.min(Math.max(box(x,y,50,52,66,48,12),-box(x,y,50,52,56,38,8)),Math.abs(Math.hypot(x-50,y-52)-13)-2.4,box(x,y,36,26,22,9,4),box(x,y,73,39,5,5,2));
  if(kind==='motion')return Math.min(...[-16,0,16].map((o,i)=>box(x,y,51+i*4,50+o,58-i*9,6,3)));
+ if(kind==='glass')return Math.min(Math.max(box(x,y,50,50,58,64,19),-box(x,y,50,50,50,56,15)),box(x,y,36,36,4,18,2),box(x,y,44,30,20,4,2),Math.abs(Math.hypot(x-64,y-66)-6)-1.5);
  return Math.min(Math.max(box(x,y,50,56,76,34,17),-box(x,y,50,56,68,26,13)),...[-24,-12,0,12,24].map(o=>box(x,y,50+o,56,7,10,2)));
 }
 function png(kind,n){const raw=Buffer.alloc((n*3+1)*n);for(let y=0;y<n;y++)for(let x=0;x<n;x++){
@@ -17,6 +18,6 @@ function png(kind,n){const raw=Buffer.alloc((n*3+1)*n);for(let y=0;y<n;y++)for(l
  }const ih=Buffer.alloc(13);ih.writeUInt32BE(n);ih.writeUInt32BE(n,4);ih[8]=8;ih[9]=2;return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ih),chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);}
 function save(p,b){const target=path.join(root,p);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,b);}
 for(const size of [40,58,60,80,87,120,180,1024])save(`camera/HorizonCamera/Assets.xcassets/AppIcon.appiconset/Icon-${size}.png`,png('camera',size));
-for(const [folder,kind] of [['HorizonMotion','motion'],['NuloraDock','dock']])for(const [suffix,size] of [['',29],['@2x',58],['@3x',87]])save(`ios26/${folder}/prefs/Resources/Icon${suffix}.png`,png(kind,size));
-for(const kind of ['camera','motion','dock'])save(`icons/nulora-${kind}.png`,png(kind,256));
+for(const [folder,kind] of [['HorizonMotion','motion'],['NuloraDock','dock'],['NuloraGlass','glass']])for(const [suffix,size] of [['',29],['@2x',58],['@3x',87]])save(`ios26/${folder}/prefs/Resources/Icon${suffix}.png`,png(kind,size));
+for(const kind of ['camera','motion','dock','glass'])save(`icons/nulora-${kind}.png`,png(kind,256));
 console.log('Nulora: camera, motion and dock icons generated');
