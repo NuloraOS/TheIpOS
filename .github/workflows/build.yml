@@ -63,8 +63,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.4.1 >/dev/null 2>&1 || gh release create v0.4.1 --title 'Nelora 0.4.1' --notes-file RELEASE-NOTES.md
-          gh release upload v0.4.1 artifacts/camera/*.deb artifacts/utility/*.deb --clobber
+          gh release view v0.4.2 >/dev/null 2>&1 || gh release create v0.4.2 --title 'Nelora 0.4.2' --notes-file RELEASE-NOTES.md
+          gh release upload v0.4.2 artifacts/camera/*.deb artifacts/utility/*.deb --clobber
   repository:
     needs: [packages, interface]
     runs-on: ubuntu-latest

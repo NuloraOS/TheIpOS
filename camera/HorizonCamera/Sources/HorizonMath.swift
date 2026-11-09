@@ -10,6 +10,7 @@ enum FrameShape: Int, CaseIterable {
 enum CropMode: Int { case dynamic, fixed }
 
 enum CameraZoom {
+    static func drag(_ initial: Double, delta: Double, width: Double) -> Double { clamp(initial * pow(120, delta / max(1,width))) }
     static func clamp(_ value: Double) -> Double { value.isFinite ? min(120, max(1, value)) : 1 }
     static func crop(_ bounds: CGRect, factor: Double) -> CGRect {
         let factor = CGFloat(clamp(factor))

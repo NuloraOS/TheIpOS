@@ -10,6 +10,7 @@ final class CameraViewController: UIViewController {
     private let gallery = UIButton(type: .system), flip = UIButton(type: .system), record = UIButton(type: .custom)
     private let inner = UIView(), status = UILabel(), zoomLabel = UILabel(), clock = UILabel()
     private let zooms = UIStackView()
+    private let horizonMap = HorizonMapView()
     private var zoomButtons: [UIButton] = [], zoomFactor = 1.0, pinchBase = 1.0
     private let light = CAShapeLayer()
     private var lightMode = 0
@@ -34,6 +35,7 @@ final class CameraViewController: UIViewController {
         button(settings, "Параметры", #selector(openSettings)); button(grid, "Сетка", #selector(toggleGrid)); button(torch, "Вспышка", #selector(toggleTorch))
         button(gallery, "Галерея", #selector(openGallery)); button(flip, "Сменить", #selector(flipCamera))
         for control in [settings, grid, torch, gallery, flip] { view.addSubview(control) }
+        view.addSubview(horizonMap)
         for segment in [ratios, modes] {
             segment.tintColor = .white
             segment.setTitleTextAttributes([.foregroundColor: UIColor.lightGray, .font: UIFont.systemFont(ofSize: 12, weight: .semibold)], for: .normal)
@@ -96,9 +98,11 @@ final class CameraViewController: UIViewController {
         zoomLabel.frame = CGRect(x: b.midX - 60, y: safe.top + 104, width: 120, height: 26)
         clock.frame = CGRect(x: b.midX - 62, y: safe.top + 84, width: 124, height: 23)
         light.frame = b
+        horizonMap.frame=CGRect(x:b.width-86,y:safe.top+140,width:72,height:98)
         let border = UIBezierPath(rect: b); border.append(UIBezierPath(roundedRect: b.insetBy(dx: 24, dy: 125), cornerRadius: 20)); light.path = border.cgPath
     }
     private func render() {
+        horizonMap.isHidden = !options.horizon; horizonMap.setAngle(current.tilt,ready:current.motionReady)
         let busy = current.recording || current.finishing
         clock.isHidden = !current.recording
         let seconds = Int(current.duration); clock.text = String(format: "● %02d:%02d", seconds/60, seconds%60)
@@ -107,7 +111,7 @@ final class CameraViewController: UIViewController {
         guard key != previousControls else { return }; previousControls = key
         for control in [ratios, modes] { control.isEnabled = !busy }
         for control in [gallery, flip, settings] { control.isEnabled = !busy }
-        record.isEnabled = current.ready && !current.finishing; record.alpha = record.isEnabled ? 1 : 0.4
+        record.isEnabled = (current.ready || current.recording) && !current.finishing; record.alpha = record.isEnabled ? 1 : 0.4
         record.accessibilityLabel = modes.selectedSegmentIndex == 0 ? "Сделать фото" : current.recording ? "Остановить запись" : "Начать запись"
         torch.isEnabled = !current.front; torch.setTitle(current.torch ? "Свет вкл." : "Вспышка", for: .normal)
         view.setNeedsLayout() // No animation or reconstruction on every sensor/timer update.
@@ -164,6 +168,7 @@ final class CameraViewController: UIViewController {
         }
         if record.frame.intersects(gallery.frame) || record.frame.intersects(flip.frame) { errors.append("Shutter overlaps controls") }
         setZoom(100); if zoomFactor != 100 { errors.append("100x zoom unavailable") }; setZoom(1)
+        current.ready=false;current.recording=true;previousControls="";render();if !record.isEnabled{errors.append("Stop disabled when camera loses readiness")};current.recording=false;current.ready=true;previousControls="";render()
         return errors
     }
     #endif

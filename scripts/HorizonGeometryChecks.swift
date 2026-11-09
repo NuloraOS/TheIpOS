@@ -3,6 +3,11 @@ import CoreGraphics
 
 @main struct HorizonGeometryChecks {
     static func main() {
+        precondition(CameraZoom.drag(2, delta:0, width:320)==2)
+        precondition(CameraZoom.drag(2, delta:80, width:320)>2)
+        precondition(CameraZoom.drag(2, delta:-80, width:320)<2)
+        precondition(CameraZoom.drag(2, delta:10000, width:320)==120)
+        precondition(CameraZoom.drag(2, delta:-10000, width:320)==1)
         var checks = 0
         for source in [CGSize(width: 720, height: 1280), CGSize(width: 1280, height: 720)] {
             for shape in FrameShape.allCases {

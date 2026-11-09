@@ -25,6 +25,7 @@ for style in classic o2; do
  for i in $(seq 1 45); do if [ -f "$container/Documents/probe-done.txt" ]; then break; fi; sleep 1; done
  cp "$container/Documents/ui-probe.png" "ui-checks/$style-camera.png"
  cp "$container/Documents/gallery-probe.png" "ui-checks/$style-gallery.png"
+ if [ "$style" = o2 ]; then cp "$container/Documents/settings-probe.png" ui-checks/o2-settings.png; cp "$container/Documents/zoom-probe.png" ui-checks/o2-zoom.png; fi
  cp "$container/Documents/ui-probe.txt" "ui-checks/$style-interface.txt"
  cp "$container/Documents/video-probe.txt" "ui-checks/$style-video.txt"
  python3 - "$container/Documents/ui-probe.txt" "$container/Documents/video-probe.txt" <<'PY'

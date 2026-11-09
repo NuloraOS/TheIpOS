@@ -4,6 +4,9 @@ cd "$(dirname "$0")/.."
 scheme="${1:-rootful}"; style="${2:-classic}"
 case "$scheme" in rootful) prefix=''; architecture='iphoneos-arm'; deployment='12.0';; rootless) prefix='/var/jb'; architecture='iphoneos-arm64'; deployment='15.0';; *) exit 1;; esac
 if [ "$style" = o2 ]; then product='NeloraO2'; bundle='com.theipos.o2camera'; label='Камера'; icon='O2Icon'; else product='HorizonCamera'; bundle='com.theipos.camera'; label='Nelora Camera'; icon='AppIcon'; fi
+if [ "$style" = o2 ] && [ -f Assets.xcassets/O2Icon.appiconset/Original.png ]; then
+ for size in 40 58 60 80 87 120 180 1024; do sips -z "$size" "$size" Assets.xcassets/O2Icon.appiconset/Original.png --out "Assets.xcassets/O2Icon.appiconset/Icon-$size.png" >/dev/null; done
+fi
 build="$PWD/build/deb-$scheme-$style-$(date +%s)"
 mkdir -p "$build/stage/DEBIAN" "$build/stage$prefix/Applications" "$PWD/packages"
 xcodebuild -project HorizonCamera.xcodeproj -scheme HorizonCamera -configuration Release -sdk iphoneos \
@@ -20,7 +23,7 @@ chmod 755 "$app/$product"
 cat > "$build/stage/DEBIAN/control" <<EOF
 Package: $bundle
 Name: $label
-Version: 0.4.1
+Version: 0.4.2
 Architecture: $architecture
 Depends: firmware (>= $deployment)
 Conflicts: com.theipos.motion, com.theipos.glass
@@ -44,4 +47,4 @@ done
 exit 0
 EOF
 chmod 755 "$build/stage/DEBIAN/postinst" "$build/stage/DEBIAN/postrm"
-dpkg-deb -Zgzip --build "$build/stage" "$PWD/packages/${bundle}_0.4.1_${architecture}.deb"
+dpkg-deb -Zgzip --build "$build/stage" "$PWD/packages/${bundle}_0.4.2_${architecture}.deb"

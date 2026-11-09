@@ -1,9 +1,9 @@
-Nelora 0.4.0 — two cameras and Dock for iOS 12 / Chimera.
-
-- Classic camera: black-and-white interface, separate Photo/Video modes, larger buttons, digital zoom up to 100x and pinch zoom.
-- Bounded GPU preview queue, shared Core Image context, reduced preview render target, no timer-driven layout animations. This is an optimization, not a physical-device FPS guarantee.
-- Gallery: three-column cached thumbnails, Photo/Video filters, zoomable photos, video player, sharing and export to Photos.
-- Separate Nelora O2 Demo app: orange/red controls, mode strip, zoom dial up to 120x, manual ISO/shutter/exposure/focus/white balance. Real rear recording targets 1080p/30; 4K/60 labels and portrait aperture are demonstration UI only. No proprietary APK/assets are included.
-- Dock: backdrop fallback across iOS12 view variants, floating rounded panel, five slots and independent preferences.
-- Glass and system Motion removed from new package indexes. Camera/Dock declare conflicts with these retired packages so Sileo can show their removal in its confirmation queue. Manual respring is still required.
-- Automated 320x568 UIKit checks and synthetic 1080x1920/30 video check on simulator. Physical camera performance and SpringBoard appearance still require device tests.
+Nelora 0.4.2 — recording fixes and camera reference UI.
+- Bounded sample delivery keeps control taps responsive; Stop stays available while recording.
+- Finalization timeout, explicit error reporting and gallery publication only after successful saving.
+- Three consecutive simulator recording checks, silent microphone input and stop before any frame.
+- Public build retains the existing original artwork. APK image references are local only pending permission; no Android executable code or libraries are included.
+- Hold zoom and slide; internal settings, mode and format panels; stabilization source/crop HUD.
+- Real rear recording targets 1080p/30. 4K/60 labels remain demo only.
+- Physical iPhone sensor direction and performance still need device verification.
+- Dock stays 0.4.0; retired Glass and Motion are not published.

@@ -20,6 +20,8 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     }
     let session = AVCaptureSession()
     let queue = DispatchQueue(label: "camera.capture", qos: .userInitiated)
+    private let deliveryQueue = DispatchQueue(label: "camera.samples", qos: .userInitiated)
+    private let videoPermit = DispatchSemaphore(value: 1), audioPermit = DispatchSemaphore(value: 8)
     var onFrame: ((CIImage) -> Void)?
     var onState: ((State) -> Void)?
     var onSaved: ((URL) -> Void)?
@@ -92,10 +94,10 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         session.addInput(input); cameraInput = input
         videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
         videoOutput.alwaysDiscardsLateVideoFrames = true
-        videoOutput.setSampleBufferDelegate(self, queue: queue); session.addOutput(videoOutput)
+        videoOutput.setSampleBufferDelegate(self, queue: deliveryQueue); session.addOutput(videoOutput)
         if microphone, let mic = AVCaptureDevice.default(for: .audio), let audioInput = try? AVCaptureDeviceInput(device: mic), session.canAddInput(audioInput), session.canAddOutput(audioOutput) {
             session.addInput(audioInput); session.addOutput(audioOutput)
-            audioOutput.setSampleBufferDelegate(self, queue: queue); audioEnabled = true
+            audioOutput.setSampleBufferDelegate(self, queue: deliveryQueue); audioEnabled = true
         }
         if #available(iOS 13.0, *) { state.ultraWide = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back) != nil }
         state.motionAvailable = motion.available
@@ -219,8 +221,8 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
 
     func toggleRecording() {
         queue.async {
-            guard self.state.ready && !self.state.finishing else { return }
             if self.recorder != nil { self.finishRecording(); return }
+            guard self.state.ready && !self.state.finishing else { return }
             do {
                 let root = try Self.library()
                 let capacity = (try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage ?? 0
@@ -271,7 +273,18 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
-        if output === audioOutput { recorder?.append(audio: sample); return }
+        // Camera delivery must never build an unbounded queue in front of a Stop tap.
+        let isAudio = output === audioOutput
+        let permit = isAudio ? audioPermit : videoPermit
+        guard permit.wait(timeout: .now()) == .success else { return }
+        queue.async {
+            defer { permit.signal() }
+            if isAudio { self.recorder?.append(audio: sample) }
+            else { self.processVideo(sample) }
+        }
+    }
+
+    private func processVideo(_ sample: CMSampleBuffer) {
         guard session.isRunning else { return }
         autoreleasepool {
             guard let buffer = CMSampleBufferGetImageBuffer(sample) else { return }
