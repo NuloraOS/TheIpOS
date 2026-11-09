@@ -2,7 +2,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
-typedef struct { NSInteger row; NSInteger col; } NDCoordinate;
+struct NDCoordinate { NSInteger row; NSInteger col; };
 @interface SBDockView : UIView @end
 @interface SBDockIconListView : UIView @end
 static BOOL dockEnabled = YES;
@@ -53,11 +53,11 @@ static void NDReload(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
 + (unsigned long long)maxIcons { return 5; }
 - (unsigned long long)iconsInRowForSpacingCalculation { return 5; }
 + (unsigned long long)iconColumnsForInterfaceOrientation:(long long)orientation { return 5; }
-- (CGPoint)originForIconAtCoordinate:(NDCoordinate)coordinate numberOfIcons:(unsigned long long)count {
+- (CGPoint)originForIconAtCoordinate:(struct NDCoordinate)coordinate numberOfIcons:(unsigned long long)count {
     CGPoint native = %orig;
     if (count != 5 || coordinate.col < 1 || coordinate.col > 5) return native;
     // Keep native vertical positioning. Distribute real icon cells across the available width.
-    NDCoordinate first = {coordinate.row, 1};
+    struct NDCoordinate first = {coordinate.row, 1};
     CGPoint anchor = %orig(first, 4);
     CGFloat iconWidth = 60, width = self.bounds.size.width;
     if (width < 5 * iconWidth) return native;

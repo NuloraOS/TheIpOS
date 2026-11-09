@@ -37,7 +37,7 @@ for folder, title in categories:
         version = subprocess.check_output(['dpkg-deb', '-f', str(file), 'Version'], text=True).strip()
         sha = hashlib.sha256(file.read_bytes()).hexdigest()
         kind = 'camera' if folder == 'camera' else ('motion' if folder == 'motion-blur' else 'dock')
-        mirror = 'https://github.com/koziavkamurz-wq/TheIpOS/releases/download/v0.2.0/' + file.name
+        mirror = 'https://github.com/NuloraOS/TheIpOS/releases/download/v0.2.0/' + file.name
         links += f'<article><img src="../icons/nulora-{kind}.png" width="64" height="64" style="border-radius:15px" alt=""><h2>{html.escape(name)}</h2><p>Версия {html.escape(version)} · iPhone 5s / iOS 12 / Chimera</p><a href="{html.escape(file.name)}" download>Скачать DEB</a> · <a href="{html.escape(mirror)}">Другой сервер</a><p><small>При ошибке времени ожидания используйте другой сервер.<br>SHA-256: <code>{sha}</code></small></p></article>'
     if not links:
         links = '<p>Пакетов пока нет.</p>'
@@ -46,5 +46,5 @@ for folder, title in categories:
     (directory / 'index.html').write_text(page(title, f'<nav><a href="../">← Nulora</a></nav><h1>{title}</h1>{links}'), encoding='utf-8')
 content = '<h1>Nulora</h1><p>Приложения и оформление для джейлбрейка.</p><nav>' + ''.join(f'<a href="{folder}/">{title}</a>' for folder, title in categories) + '</nav>'
 content += '<p>Добавь адрес этой страницы в Sileo как репозиторий. Первые пакеты — экспериментальные сборки под iOS 12 / Chimera. Эффект motion blur не повышает частоту экрана.</p>'
-content += ''.join(cards) + '<p><a href="Packages">Индекс пакетов</a> · <a href="https://github.com/koziavkamurz-wq/TheIpOS">Исходники</a></p>'
+content += ''.join(cards) + '<p><a href="Packages">Индекс пакетов</a> · <a href="https://github.com/NuloraOS/TheIpOS">Исходники</a></p>'
 (root / 'index.html').write_text(page('Репозиторий', content), encoding='utf-8')
