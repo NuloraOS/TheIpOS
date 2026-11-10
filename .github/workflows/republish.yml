@@ -1,0 +1,53 @@
+name: Publish verified APT packages
+on:
+  workflow_dispatch:
+    inputs:
+      verified_run:
+        description: Successful package and interface build run
+        required: true
+        default: '42793848639'
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+concurrency:
+  group: verified-apt-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify original build checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_RUN: ${{ inputs.verified_run }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN/jobs?filter=latest" > checks.json
+          python3 - <<'PY'
+          import json
+          jobs = json.load(open('checks.json'))['jobs']
+          for name in ('packages', 'interface'):
+              assert any(j['name'] == name and j['conclusion'] == 'success' for j in jobs), name
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-deb-packages
+          path: repo
+          run-id: ${{ inputs.verified_run }}
+          github-token: ${{ github.token }}
+      - name: Create APT index
+        run: python3 scripts/make-repo.py repo
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          name: apt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: repo
+      - uses: actions/deploy-pages@v4
+        id: deployment
+        with:
+          artifact_name: apt-${{ github.run_id }}-${{ github.run_attempt }}
