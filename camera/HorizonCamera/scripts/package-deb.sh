@@ -23,7 +23,7 @@ chmod 755 "$app/$product"
 cat > "$build/stage/DEBIAN/control" <<EOF
 Package: $bundle
 Name: $label
-Version: 0.4.2
+Version: 0.4.3
 Architecture: $architecture
 Depends: firmware (>= $deployment)
 Conflicts: com.theipos.motion, com.theipos.glass
@@ -47,4 +47,4 @@ done
 exit 0
 EOF
 chmod 755 "$build/stage/DEBIAN/postinst" "$build/stage/DEBIAN/postrm"
-dpkg-deb -Zgzip --build "$build/stage" "$PWD/packages/${bundle}_0.4.2_${architecture}.deb"
+dpkg-deb -Zgzip --build "$build/stage" "$PWD/packages/${bundle}_0.4.3_${architecture}.deb"

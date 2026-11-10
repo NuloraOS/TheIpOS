@@ -1,9 +1,8 @@
-Nelora 0.4.2 — recording fixes and camera reference UI.
-- Bounded sample delivery keeps control taps responsive; Stop stays available while recording.
-- Finalization timeout, explicit error reporting and gallery publication only after successful saving.
-- Three consecutive simulator recording checks, silent microphone input and stop before any frame.
-- Public build retains the existing original artwork. APK image references are local only pending permission; no Android executable code or libraries are included.
-- Hold zoom and slide; internal settings, mode and format panels; stabilization source/crop HUD.
-- Real rear recording targets 1080p/30. 4K/60 labels remain demo only.
-- Physical iPhone sensor direction and performance still need device verification.
-- Dock stays 0.4.0; retired Glass and Motion are not published.
+Nelora 0.4.3 — камеры и Dock для iOS 12 / Chimera.
+- Dock скрывает штатную подложку iOS 12, включая WallpaperEffect и фон из _backgroundView; собственная панель остаётся единственной.
+- При выключении оформления восстанавливаются исходные прозрачность и видимость штатного фона; значки не скрываются.
+- Вторая камера использует иконку и выбранные значки из предоставленного пользователем APK. Пользователь подтвердил разрешение правообладателя на их публикацию. Исполняемый Android-код не включён.
+- Удержание кнопки зума и движение пальца; собственные панели параметров, режимов и формата.
+- Ограниченная очередь кадров, доступная остановка записи и ограничение времени сохранения; незавершённые файлы не появляются в галерее.
+- Проверки: три цикла записи и сохранения, запись без входящих аудиосэмплов, остановка без кадров, управление внутри камеры, геометрия кадрирования, видимость и восстановление Dock на UIKit-макете.
+- Физическая проверка производительности и направления датчиков на iPhone ещё требуется. Реальная основная запись — 1080p/30 при поддержке; 4K/60 остаются подписями для демонстрации.

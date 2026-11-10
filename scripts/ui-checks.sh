@@ -13,12 +13,14 @@ PY
 )
 if [ "$state" != Booted ]; then xcrun simctl boot "$device"; fi
 xcrun simctl bootstatus "$device" -b
+sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
+xcrun --sdk iphonesimulator clang -target x86_64-apple-ios12.0-simulator -isysroot "$sdk" -fobjc-arc -c scripts/DockAppearanceChecks.m -o "$RUNNER_TEMP/dock-checks.o"
 for style in classic o2; do
  if [ "$style" = o2 ]; then product=NeloraO2; bundle=com.theipos.o2camera; icon=O2Icon; else product=HorizonCamera; bundle=com.theipos.camera; icon=AppIcon; fi
  build="$RUNNER_TEMP/ui-$style"
  xcodebuild -project camera/HorizonCamera/HorizonCamera.xcodeproj -scheme HorizonCamera -configuration Debug \
  -sdk iphonesimulator -destination "platform=iOS Simulator,id=$device" -derivedDataPath "$build" \
- CODE_SIGNING_ALLOWED=NO PRODUCT_NAME="$product" PRODUCT_BUNDLE_IDENTIFIER="$bundle" ASSETCATALOG_COMPILER_APPICON_NAME="$icon" build > "$RUNNER_TEMP/ui-$style-build.log" 2>&1 || { tail -n 80 "$RUNNER_TEMP/ui-$style-build.log"; exit 1; }
+ CODE_SIGNING_ALLOWED=NO PRODUCT_NAME="$product" PRODUCT_BUNDLE_IDENTIFIER="$bundle" ASSETCATALOG_COMPILER_APPICON_NAME="$icon" SWIFT_OBJC_BRIDGING_HEADER="$PWD/scripts/DockAppearanceChecks.h" OTHER_LDFLAGS="$RUNNER_TEMP/dock-checks.o" build > "$RUNNER_TEMP/ui-$style-build.log" 2>&1 || { tail -n 80 "$RUNNER_TEMP/ui-$style-build.log"; exit 1; }
  xcrun simctl install "$device" "$build/Build/Products/Debug-iphonesimulator/$product.app"
  xcrun simctl launch --terminate-running-process "$device" "$bundle" --ui-probe
  container=$(xcrun simctl get_app_container "$device" "$bundle" data)
@@ -28,7 +30,8 @@ for style in classic o2; do
  if [ "$style" = o2 ]; then cp "$container/Documents/settings-probe.png" ui-checks/o2-settings.png; cp "$container/Documents/zoom-probe.png" ui-checks/o2-zoom.png; fi
  cp "$container/Documents/ui-probe.txt" "ui-checks/$style-interface.txt"
  cp "$container/Documents/video-probe.txt" "ui-checks/$style-video.txt"
- python3 - "$container/Documents/ui-probe.txt" "$container/Documents/video-probe.txt" <<'PY'
+ cp "$container/Documents/dock-probe.txt" "ui-checks/$style-dock.txt"
+ python3 - "$container/Documents/ui-probe.txt" "$container/Documents/video-probe.txt" "$container/Documents/dock-probe.txt" <<'PY'
 import pathlib,sys
 for name in sys.argv[1:]:
  report=pathlib.Path(name).read_text()

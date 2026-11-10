@@ -258,6 +258,7 @@ private enum CameraUIProbe {
             else if let camera=root as? O2CameraViewController{errors=camera.checkInterface()}
             else{errors=["Unknown root controller"]}
             let folder=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0]
+            if let result=NDDockRunChecks(){try? String(cString:result).write(to:folder.appendingPathComponent("dock-probe.txt"),atomically:true,encoding:.utf8)}
             let stamp=UILabel(frame:CGRect(x:0,y:root.view.bounds.height-14,width:root.view.bounds.width,height:14));stamp.text="UI-проверка · симулятор без камеры";stamp.textColor = .gray;stamp.font = .systemFont(ofSize:8);stamp.textAlignment = .center;root.view.addSubview(stamp)
             let renderer=UIGraphicsImageRenderer(bounds:root.view.bounds)
             let image=renderer.image{context in root.view.layer.render(in:context.cgContext)}
