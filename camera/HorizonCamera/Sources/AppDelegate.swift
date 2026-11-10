@@ -31,6 +31,7 @@ final class O2CameraViewController: UIViewController {
     private var toastTicket = 0, visible = false
     private var zoomHoldStart = CGPoint.zero, zoomHoldValue = 1.0, dialTicket = 0
     private var panel:UIView?, lastMessage = ""
+    private var dialAnimator:UIViewPropertyAnimator?
     private var panelActions:[()->Void] = []
     private var modeButtons: [UIButton] = [], zoomButtons: [UIButton] = []
     override var preferredStatusBarStyle:UIStatusBarStyle { .lightContent }
@@ -62,7 +63,7 @@ final class O2CameraViewController: UIViewController {
         slider.tintColor = orange;slider.isHidden=true;slider.isContinuous=false;slider.addTarget(self,action:#selector(parameterChanged),for:.valueChanged);view.addSubview(slider)
         toast.textColor = .white;toast.font = .systemFont(ofSize:12);toast.textAlignment = .center;toast.backgroundColor = UIColor(white:0.18,alpha:0.95);toast.layer.cornerRadius=7;toast.clipsToBounds=true;toast.numberOfLines=2;toast.alpha=0;view.addSubview(toast)
         clock.textColor = .white;clock.font = .monospacedDigitSystemFont(ofSize:13,weight:.semibold);clock.textAlignment = .center;view.addSubview(clock)
-        dial.isHidden=true;dial.onChange={ [weak self] value in self?.setZoom(value) };view.insertSubview(dial,belowSubview:shutter)
+        dial.isHidden=true;dial.onChange={ [weak self] value in self?.setZoom(value) };dial.onBegin={ [weak self] in self?.showZoomDial() };dial.onEnd={ [weak self] in self?.hideZoomDialLater() };view.insertSubview(dial,belowSubview:shutter)
         let pinch=UIPinchGestureRecognizer(target:self,action:#selector(pinch(_:)));preview.addGestureRecognizer(pinch)
         let tap=UITapGestureRecognizer(target:self,action:#selector(tapFocus(_:)));preview.addGestureRecognizer(tap)
         engine.onFrame={ [weak self] image in self?.preview.display(image) }
@@ -113,18 +114,22 @@ final class O2CameraViewController: UIViewController {
         if mode==3{say("Портрет: демонстрационный интерфейс")}
     }
     @objc private func lens(_ b:UIButton){setZoom([1.0,2,3,6,120][b.tag])}
+    private func animateDial(_ shown:Bool,ticket:Int){
+        if let old=dialAnimator,old.state == .active{old.stopAnimation(false);old.finishAnimation(at:.current)}
+        let timing=UICubicTimingParameters(controlPoint1:shown ? CGPoint(x:0,y:0):CGPoint(x:0.3,y:0),controlPoint2:shown ? CGPoint(x:0.1,y:1):CGPoint(x:1,y:1))
+        let animator=UIViewPropertyAnimator(duration:shown ? 0.347:0.25,timingParameters:timing)
+        animator.addAnimations{[weak self] in self?.dial.alpha=shown ? 1:0;self?.dial.transform=shown ? .identity:CGAffineTransform(translationX:0,y:12)}
+        if !shown{animator.addCompletion{[weak self] _ in guard let self=self,self.dialTicket==ticket else{return};self.dial.isHidden=true}}
+        dialAnimator=animator;animator.startAnimation(afterDelay:shown ? 0.07:0)
+    }
     private func showZoomDial(){
         dialTicket += 1
-        guard dial.isHidden else{return}
-        dial.isHidden=false;dial.alpha=0;dial.transform=CGAffineTransform(translationX:0,y:18)
-        UIView.animate(withDuration:0.347,delay:0.07,options:[.beginFromCurrentState,.allowUserInteraction,.curveEaseOut],animations:{self.dial.alpha=1;self.dial.transform = .identity})
+        if dial.isHidden{dial.isHidden=false;dial.alpha=0;dial.transform=CGAffineTransform(translationX:0,y:18)}
+        animateDial(true,ticket:dialTicket)
     }
     private func hideZoomDialLater(){
         dialTicket += 1;let ticket=dialTicket
-        DispatchQueue.main.asyncAfter(deadline:.now()+0.7){[weak self] in
-            guard let self=self,self.dialTicket==ticket else{return}
-            UIView.animate(withDuration:0.18,delay:0,options:[.beginFromCurrentState,.allowUserInteraction,.curveEaseIn],animations:{self.dial.alpha=0;self.dial.transform=CGAffineTransform(translationX:0,y:12)}){_ in if self.dialTicket==ticket{self.dial.isHidden=true}}
-        }
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.7){[weak self] in guard let self=self,self.dialTicket==ticket else{return};self.animateDial(false,ticket:ticket)}
     }
     @objc private func holdZoom(_ gesture:UILongPressGestureRecognizer){
         let point=gesture.location(in:view)
@@ -217,14 +222,32 @@ final class HorizonMapView:UIView{
 
 private final class O2ZoomDial:UIView{
     var value=1.0{didSet{setNeedsDisplay()}}
-    var onChange:((Double)->Void)?
+    var onChange:((Double)->Void)?,onBegin:(()->Void)?,onEnd:(()->Void)?
     private var initial=1.0
     override init(frame:CGRect){super.init(frame:frame);backgroundColor = .clear;addGestureRecognizer(UIPanGestureRecognizer(target:self,action:#selector(pan(_:))))}
     required init?(coder:NSCoder){fatalError("init(coder:) is not used")}
-    override func draw(_ rect:CGRect){guard let c=UIGraphicsGetCurrentContext() else{return};let center=CGPoint(x:bounds.midX,y:bounds.height+75),radius=bounds.width*0.54; c.setLineWidth(1);for tick in -35...35{let angle = -Double.pi/2+Double(tick)*0.021,major=tick%5==0,length:CGFloat=major ? 13:6;let p=CGPoint(x:center.x+CGFloat(cos(angle))*radius,y:center.y+CGFloat(sin(angle))*radius);let q=CGPoint(x:center.x+CGFloat(cos(angle))*(radius-length),y:center.y+CGFloat(sin(angle))*(radius-length));c.setStrokeColor(UIColor(white:major ? 0.9:0.35,alpha:1).cgColor);c.move(to:p);c.addLine(to:q);c.strokePath()};let text=String(format:"%.1f×",value) as NSString;text.draw(in:CGRect(x:bounds.midX-50,y:bounds.height-55,width:100,height:30),withAttributes:[.font:UIFont.monospacedDigitSystemFont(ofSize:16,weight:.semibold),.foregroundColor:UIColor.orange])}
-    @objc private func pan(_ g:UIPanGestureRecognizer){if g.state == .began{initial=value};let changed=initial*pow(120,Double(g.translation(in:self).x)/Double(max(1,bounds.width)));onChange?(changed)}
+    override func draw(_ rect:CGRect){
+        guard let c=UIGraphicsGetCurrentContext() else{return}
+        let center=CGPoint(x:bounds.midX,y:bounds.height+75),radius=bounds.width*0.54,position=log(CameraZoom.clamp(value))/log(120)
+        c.setFillColor(UIColor(white:0.1,alpha:0.96).cgColor);c.fillEllipse(in:CGRect(x:center.x-radius,y:center.y-radius,width:radius*2,height:radius*2));c.setLineWidth(1)
+        func angle(_ t:Double)->Double{-Double.pi/2+(t-position)*1.5}
+        for tick in 0...90{
+            let a=angle(Double(tick)/90);guard abs(a+Double.pi/2)<0.76 else{continue}
+            let major=tick%5==0,length:CGFloat=major ? 12:6
+            let p=CGPoint(x:center.x+CGFloat(cos(a))*radius,y:center.y+CGFloat(sin(a))*radius),q=CGPoint(x:center.x+CGFloat(cos(a))*(radius-length),y:center.y+CGFloat(sin(a))*(radius-length))
+            c.setStrokeColor(UIColor(white:major ? 0.8:0.35,alpha:1).cgColor);c.move(to:p);c.addLine(to:q);c.strokePath()
+        }
+        let font=UIFont.monospacedDigitSystemFont(ofSize:11,weight:.medium)
+        for z in [1.0,2,3,6,10,20,30,60,120]{let a=angle(log(z)/log(120));guard abs(a+Double.pi/2)<0.72 else{continue};let text=String(format:"%.0f",z) as NSString,attributes:[NSAttributedString.Key:Any]=[.font:font,.foregroundColor:UIColor.white],size=text.size(withAttributes:attributes);c.saveGState();c.translateBy(x:center.x+CGFloat(cos(a))*(radius-25),y:center.y+CGFloat(sin(a))*(radius-25));c.rotate(by:CGFloat(a+Double.pi/2));text.draw(at:CGPoint(x:-size.width/2,y:-size.height/2),withAttributes:attributes);c.restoreGState()}
+        c.setStrokeColor(UIColor.orange.cgColor);c.setLineWidth(2);c.move(to:CGPoint(x:center.x,y:center.y-radius-2));c.addLine(to:CGPoint(x:center.x,y:center.y-radius+13));c.strokePath()
+        let text=String(format:"%.1f×",value) as NSString,attributes:[NSAttributedString.Key:Any]=[.font:UIFont.monospacedDigitSystemFont(ofSize:16,weight:.semibold),.foregroundColor:UIColor.orange],size=text.size(withAttributes:attributes);text.draw(at:CGPoint(x:center.x-size.width/2,y:center.y-radius-28),withAttributes:attributes)
+    }
+    @objc private func pan(_ g:UIPanGestureRecognizer){
+        if g.state == .began{initial=value;onBegin?()}
+        onChange?(CameraZoom.drag(initial,delta:Double(g.translation(in:self).x),width:Double(bounds.width)))
+        if g.state == .ended || g.state == .cancelled || g.state == .failed{onEnd?()}
+    }
 }
-
 #if targetEnvironment(simulator)
 private enum CameraUIProbe {
     static func verifyRecordings(_ records:URL)throws->String{
